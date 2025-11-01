@@ -1,0 +1,224 @@
+# Power BI Data Model Configuration for Retail Inventory Dashboard
+
+This directory contains the configuration and data model for the Power BI retail inventory dashboard.
+
+## Data Sources
+
+### Primary Data Sources:
+1. **ClickHouse Database**
+   - Connection: `jdbc:clickhouse://clickhouse:8123/retail`
+   - Tables: fact_sales, fact_inventory, dim_product, dim_store, realtime_sales_metrics
+
+2. **Real-time Streaming Data**
+   - Kafka topics processed by Spark Streaming
+   - Aggregated metrics stored in ClickHouse
+
+## Data Model Relationships
+
+```
+dim_date (Date Key)
+    │
+    ├── fact_sales (Date Key, Product Key, Store Key)
+    │   ├── dim_product (Product Key)
+    │   └── dim_store (Store Key)
+    │
+    ├── fact_inventory (Date Key, Product Key, Store Key)
+    │   ├── dim_product (Product Key)
+    │   └── dim_store (Store Key)
+    │
+    └── fact_ml_predictions (Date Key, Product Key, Store Key)
+        ├── dim_product (Product Key)
+        └── dim_store (Store Key)
+```
+
+## Dashboard Pages
+
+### 1. Executive Overview
+- **Key Metrics**: Total Revenue, Transactions, Customers, Profit Margin
+- **Trend Analysis**: Daily/Weekly/Monthly performance
+- **Regional Performance**: Revenue by store region
+- **Top Products**: Best performing products by revenue
+
+### 2. Real-time Monitoring
+- **Live Sales**: Real-time transaction stream
+- **Inventory Alerts**: Low stock and out-of-stock notifications
+- **Store Performance**: Real-time revenue by store
+- **Customer Activity**: Active customers and transaction patterns
+
+### 3. Inventory Management
+- **Stock Levels**: Current inventory across stores
+- **Turnover Analysis**: Inventory turnover rates
+- **Reorder Alerts**: Products needing restock
+- **Stock-out Analysis**: Products frequently out of stock
+
+### 4. Machine Learning Insights
+- **Demand Forecast**: Predicted demand for next 7 days
+- **Stock Optimization**: Recommended stock levels
+- **Anomaly Detection**: Unusual sales patterns
+- **Model Performance**: ML model accuracy metrics
+
+### 5. Store Analytics
+- **Store Comparison**: Performance across locations
+- **Revenue per SqFt**: Store efficiency metrics
+- **Customer Behavior**: Shopping patterns by store
+- **Product Mix**: Best sellers by location
+
+## DAX Measures
+
+### Key Performance Indicators
+```dax
+Total Revenue = SUM(fact_sales[revenue])
+Total Transactions = COUNT(fact_sales[sale_id])
+Total Customers = DISTINCTCOUNT(fact_sales[customer_id])
+Profit Margin = DIVIDE(SUM(fact_sales[profit]), SUM(fact_sales[revenue]))
+Avg Transaction Value = AVERAGE(fact_sales[total_amount])
+```
+
+### Inventory Metrics
+```dax
+Current Stock Level = SUM(fact_inventory[quantity_on_hand])
+Low Stock Items = CALCULATE(
+    COUNTROWS(fact_inventory),
+    fact_inventory[quantity_on_hand] <= fact_inventory[reorder_point]
+)
+Stock Turnover = DIVIDE(
+    [Total Units Sold],
+    [Average Stock Level]
+)
+```
+
+### Time Intelligence
+```dax
+Revenue YoY Growth = 
+VAR CurrentYear = [Total Revenue]
+VAR PreviousYear = CALCULATE([Total Revenue], SAMEPERIODLASTYEAR(dim_date[date_key]))
+RETURN DIVIDE(CurrentYear - PreviousYear, PreviousYear)
+
+Running Total Revenue = 
+CALCULATE(
+    [Total Revenue],
+    FILTER(
+        ALLSELECTED(dim_date),
+        dim_date[date_key] <= MAX(dim_date[date_key])
+    )
+)
+```
+
+## Data Refresh Schedule
+
+### Real-time Data
+- **Streaming Data**: Continuous update from ClickHouse
+- **Refresh Rate**: Every 5 minutes for real-time metrics
+
+### Batch Data
+- **Daily Updates**: Overnight processing
+- **ML Predictions**: Updated daily with new forecasts
+- **Historical Data**: Monthly archival and aggregation
+
+## Security and Access
+
+### Row-Level Security
+```dax
+-- Store Manager Security
+[Store Manager Access] = 
+IF(
+    USERPRINCIPALNAME() = [Store Manager Email],
+    TRUE(),
+    FALSE()
+)
+```
+
+### Data Privacy
+- Customer data: Anonymous aggregation
+- Financial data: Role-based access control
+- Inventory data: Store-level restrictions
+
+## Implementation Steps
+
+### 1. Data Connection Setup
+```m
+let
+    Source = ClickHouse.Database("clickhouse:8123", "retail"),
+    fact_sales = Source{[Schema="",Item="fact_sales"]}[Data]
+in
+    fact_sales
+```
+
+### 2. Data Transformation
+- Clean and validate data
+- Create calculated columns
+- Establish relationships
+- Optimize data model
+
+### 3. Dashboard Creation
+- Design layout and visuals
+- Implement filters and slicers
+- Add drill-through capabilities
+- Configure mobile layout
+
+### 4. Deployment
+- Publish to Power BI Service
+- Configure data refresh
+- Set up alerts and notifications
+- Share with stakeholders
+
+## Sample Queries for ClickHouse
+
+### Real-time Sales Metrics
+```sql
+SELECT 
+    store_name,
+    product_name,
+    SUM(total_quantity) as total_sold,
+    SUM(total_revenue) as revenue,
+    COUNT(transaction_count) as transactions
+FROM realtime_dashboard
+GROUP BY store_name, product_name
+```
+
+### Inventory Health
+```sql
+SELECT 
+    store_name,
+    COUNT(*) as total_products,
+    SUM(CASE WHEN stock_status = 'LOW' THEN 1 ELSE 0 END) as low_stock,
+    SUM(CASE WHEN stock_status = 'CRITICAL' THEN 1 ELSE 0 END) as critical_stock
+FROM current_inventory
+GROUP BY store_name
+```
+
+### Customer Insights
+```sql
+SELECT 
+    shopping_days,
+    total_spent,
+    avg_transaction_value,
+    unique_products_purchased
+FROM customer_behavior_analysis
+WHERE total_spent > 100
+```
+
+## Troubleshooting
+
+### Common Issues
+1. **Connection Timeouts**: Check ClickHouse server availability
+2. **Data Latency**: Verify streaming pipeline health
+3. **Performance Issues**: Optimize queries and data model
+4. **Refresh Failures**: Check credentials and network connectivity
+
+### Performance Optimization
+- Use DirectQuery for real-time data
+- Implement aggregations for large datasets
+- Leverage query folding where possible
+- Monitor and optimize DAX calculations
+
+## Next Steps
+
+1. **Connect Power BI Desktop** to ClickHouse data source
+2. **Import data model** and establish relationships
+3. **Create calculated measures** using DAX
+4. **Design dashboard visuals** and layouts
+5. **Publish and share** with stakeholders
+6. **Configure automated refresh** and monitoring
+
+This configuration provides a comprehensive foundation for building an interactive retail inventory dashboard in Power BI.

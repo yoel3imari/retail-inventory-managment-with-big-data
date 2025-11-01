@@ -204,7 +204,7 @@ class SampleDataGenerator:
         print(f"Brands: {len(brands)}")
         print(f"Products: {len(products)}")
         print(f"Stores: {len(stores)}")
-        print(f"\nData saved to ./data/ directory")
+        print("\nData saved to ./data/ directory")
 
 def main():
     parser = argparse.ArgumentParser(description="Generate sample data for retail inventory management")

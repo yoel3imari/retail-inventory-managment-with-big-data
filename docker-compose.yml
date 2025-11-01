@@ -59,7 +59,7 @@ services:
     container_name: clickhouse
     ports:
       - "8123:8123"      # HTTP interface
-      - "9000:9000"      # Native client port
+      - "9004:9000"      # Native client port (changed from 9000 to avoid conflict)
     environment:
       CLICKHOUSE_DB: default
       CLICKHOUSE_USER: default
@@ -150,14 +150,13 @@ services:
 
   # Apache Spark - Distributed processing
   spark-master:
-    image: bitnami/spark:latest
+    image: apache/spark:3.4.1
     container_name: spark-master
-    environment:
-      - SPARK_MODE=master
-      - SPARK_RPC_AUTHENTICATION_ENABLED=no
-      - SPARK_RPC_ENCRYPTION_ENABLED=no
-      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
-      - SPARK_SSL_ENABLED=no
+    command: >
+      bash -c "
+        /opt/spark/sbin/start-master.sh &&
+        tail -f /opt/spark/logs/spark--org.apache.spark.deploy.master.Master-1-*.out
+      "
     ports:
       - "7077:7077"      # Spark master port
       - "8082:8080"      # Spark master web UI
@@ -168,19 +167,18 @@ services:
       - dev-network
 
   spark-worker:
-    image: bitnami/spark:latest
+    image: apache/spark:3.4.1
     container_name: spark-worker
     depends_on:
       - spark-master
+    command: >
+      bash -c "
+        /opt/spark/sbin/start-worker.sh spark://spark-master:7077 &&
+        tail -f /opt/spark/logs/spark--org.apache.spark.deploy.worker.Worker-1-*.out
+      "
     environment:
-      - SPARK_MODE=worker
-      - SPARK_MASTER_URL=spark://spark-master:7077
-      - SPARK_WORKER_MEMORY=1G
-      - SPARK_WORKER_CORES=1
-      - SPARK_RPC_AUTHENTICATION_ENABLED=no
-      - SPARK_RPC_ENCRYPTION_ENABLED=no
-      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
-      - SPARK_SSL_ENABLED=no
+      SPARK_WORKER_MEMORY: 1G
+      SPARK_WORKER_CORES: 1
     volumes:
       - ./spark_jobs:/opt/spark/jobs
       - ./config:/opt/spark/conf
@@ -200,6 +198,7 @@ services:
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
       - CLICKHOUSE_HOST=clickhouse
       - CLICKHOUSE_PORT=8123
+      - PYTHONPATH=/app
     volumes:
       - ./scripts:/app/scripts
       - ./src:/app/src

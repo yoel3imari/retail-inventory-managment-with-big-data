@@ -1,35 +1,25 @@
+# Use a base image for Python and slim footprint
 FROM python:3.9-slim
 
-# Set working directory
+# Install uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    curl \
-    wget \
-    && rm -rf /var/lib/apt/lists/*
-
-# Copy requirements first for better caching
-COPY requirements.txt .
-
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy application code
-COPY scripts/ ./scripts/
-COPY src/ ./src/
-COPY config/ ./config/
-
-# Create necessary directories
-RUN mkdir -p /app/logs /app/data
-
-# Set environment variables
+# Set the Python path
 ENV PYTHONPATH=/app
-ENV PYTHONUNBUFFERED=1
 
-# Health check (simple process check)
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD ps aux | grep python | grep -v grep || exit 1
+# First copy only project metadata (for better Docker caching)
+COPY requirements.txt ./
+
+# Install dependencies using uv (no cache, frozen lockfile)
+RUN uv pip install --system -r requirements.txt
+
+# Now copy the rest of the app
+COPY . .
+
+# Expose port
+EXPOSE 8000
 
 # Default command
 CMD ["python", "scripts/data_generator.py"]

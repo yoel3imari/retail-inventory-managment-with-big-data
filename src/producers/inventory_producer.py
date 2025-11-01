@@ -4,7 +4,7 @@ Handles production of inventory update events to Kafka
 """
 
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 
 from .base_producer import BaseProducer
 from config.settings import KAFKA_TOPICS
