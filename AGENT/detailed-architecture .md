@@ -113,7 +113,7 @@ big-data-project/
 └── monitoring/
     ├── prometheus/
     │   └── prometheus.yml
-    └── grafana/
+    └── Power BI/
         └── dashboards/
 ```
 
@@ -144,7 +144,7 @@ Infrastructure setup scripts (creating buckets, tables, topics)
 SQL files for ClickHouse DDL and analytical queries
 
 ### **monitoring/**
-Observability stack configuration (Prometheus, Grafana)
+Observability stack configuration (Prometheus, Power BI)
 
 ## Typical Data Flow:
 
@@ -153,7 +153,7 @@ Observability stack configuration (Prometheus, Grafana)
 3. **Storage**: Raw data lands in MinIO (data lake)
 4. **Processing**: Airflow orchestrates batch jobs
 5. **Analytics**: Transformed data loads into ClickHouse
-6. **Monitoring**: Metrics tracked via Prometheus/Grafana
+6. **Monitoring**: Metrics tracked via Prometheus/Power BI
 
 This structure supports separation of concerns, scalability, and maintainability for enterprise big data projects.
 
@@ -375,7 +375,7 @@ big-data-project/
 └── monitoring/
     ├── prometheus/
     │   └── prometheus.yml
-    ├── grafana/
+    ├── Power BI/
     │   └── dashboards/
     │       ├── pipeline_metrics.json
     │       └── ml_metrics.json
@@ -717,7 +717,7 @@ GROUP BY date
 ORDER BY date DESC;
 ```
 
-### Step 11: Dashboards (Grafana)
+### Step 11: Dashboards (Power BI)
 - Model performance metrics (AUC, precision, recall)
 - Data pipeline health (Kafka lag, Spark job duration)
 - Business metrics (predicted churn rate, revenue impact)
@@ -779,7 +779,7 @@ ORDER BY date DESC;
                            │
                            ▼
                   ┌─────────────────┐
-                  │    Grafana      │
+                  │    Power BI     │
                   │  (Dashboard)    │
                   └─────────────────┘
 ```
@@ -1156,7 +1156,7 @@ Real-time inventory optimization system for multi-store retail chains using pred
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                 GRAFANA DASHBOARDS & ALERTS                  │
+│                 Power BI DASHBOARDS & ALERTS                  │
 ├─────────────────────────────────────────────────────────────┤
 │                                                              │
 │  📊 Executive Dashboard:                                     │
@@ -1233,7 +1233,7 @@ Real-time inventory optimization system for multi-store retail chains using pred
    
 8. ALERTING
    If stock < reorder_point:
-   • Generate alert in Grafana
+   • Generate alert in Power BI
    • Email store manager
    • Create purchase order suggestion
    ↓
@@ -1287,7 +1287,7 @@ Real-time inventory optimization system for multi-store retail chains using pred
 | **ClickHouse** | Fast analytical queries | Columnar database |
 | **Airflow** | Orchestrate batch jobs | Apache Airflow |
 | **MLlib** | Train & deploy ML models | Spark MLlib |
-| **Grafana** | Visualize insights & alerts | Grafana + Prometheus |
+| **Power BI** | Visualize insights & alerts | Power BI + Prometheus |
 
 ---
 

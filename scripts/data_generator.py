@@ -1,190 +1,340 @@
-# Creating a self-contained Python script that streams fake Point-of-Sale (PoS) transactions.
-# The demo below will generate a few sample transactions and print them to the notebook output.
-# Save this as `pos_streamer.py` for later use. The script supports console, file, and HTTP modes
-# (HTTP requires the `requests` package; if missing it falls back to console printing).
-#
-# Usage examples (after saving as pos_streamer.py):
-#  - Console streaming: python pos_streamer.py --mode console --count 100 --mean-interval 0.5
-#  - HTTP streaming: python pos_streamer.py --mode http --url http://localhost:8000/ingest --count 500
-#  - File output: python pos_streamer.py --mode file --out /tmp/transactions.ndjson --count 1000
-#
-# The demo run below prints 5 generated transactions (fast, without long sleeps).
-import json
-import random
-import uuid
-import time
-import argparse
-from datetime import datetime, timezone, timedelta
-
-# --- Transaction generator ---
-PRODUCT_CATALOG = [
-    {"product_id": "sku-1001", "name": "Espresso", "price": 2.5, "tax_rate": 0.07},
-    {"product_id": "sku-1002", "name": "Latte", "price": 3.5, "tax_rate": 0.07},
-    {"product_id": "sku-1003", "name": "Bagel", "price": 1.8, "tax_rate": 0.00},
-    {"product_id": "sku-1004", "name": "Sandwich", "price": 5.0, "tax_rate": 0.07},
-    {"product_id": "sku-1005", "name": "Soda", "price": 1.2, "tax_rate": 0.07},
-    {"product_id": "sku-1006", "name": "Water Bottle", "price": 1.0, "tax_rate": 0.00},
-    {"product_id": "sku-1007", "name": "Croissant", "price": 2.0, "tax_rate": 0.07},
-    {"product_id": "sku-1008", "name": "Sandwich Deluxe", "price": 7.5, "tax_rate": 0.07},
-]
-
-PAYMENT_METHODS = ["cash", "card", "mobile", "gift_card"]
-CURRENCIES = ["USD", "EUR", "GBP"]
-
-def iso_now():
-    return datetime.now(timezone.utc).astimezone().isoformat()
-
-def pick_items():
-    # choose 1-5 distinct items, with random quantities
-    count = random.choices([1,2,3,4,5], weights=[40,30,15,10,5])[0]
-    items = []
-    catalog = PRODUCT_CATALOG
-    chosen = random.sample(catalog, k=min(count, len(catalog)))
-    for p in chosen:
-        qty = random.choices([1,1,1,2,3], weights=[50,20,10,15,5])[0]
-        price = round(p["price"] * (1 + random.uniform(-0.03, 0.05)), 2)  # slight price noise
-        tax_rate = p.get("tax_rate", 0.0)
-        items.append({
-            "product_id": p["product_id"],
-            "name": p["name"],
-            "qty": qty,
-            "unit_price": price,
-            "tax_rate": tax_rate
-        })
-    return items
-
-def compute_totals(items):
-    subtotal = sum(i["unit_price"] * i["qty"] for i in items)
-    tax = sum(i["unit_price"] * i["qty"] * i.get("tax_rate", 0.0) for i in items)
-    # small chance of discount
-    discount = 0.0
-    if random.random() < 0.08:
-        # percent discount 5%-20%
-        discount = round(subtotal * random.uniform(0.05, 0.2), 2)
-    total = round(subtotal + tax - discount, 2)
-    return {"subtotal": round(subtotal,2), "tax": round(tax,2), "discount": discount, "total": total}
-
-def generate_transaction(store_ids=(1,2,3,4), currency="USD"):
-    tx_id = str(uuid.uuid4())
-    ts = iso_now()
-    store_id = f"store-{random.choice(store_ids)}"
-    terminal_id = f"term-{random.randint(1,8)}"
-    cashier_id = f"cashier-{random.randint(100,199)}"
-    items = pick_items()
-    totals = compute_totals(items)
-    payment_method = random.choices(PAYMENT_METHODS, weights=[20,60,15,5])[0]
-    approval_code = None
-    if payment_method in ("card", "mobile", "gift_card"):
-        approval_code = f"APP-{random.randint(100000,999999)}"
-    # customer sometimes present
-    customer_id = None
-    if random.random() < 0.15:
-        customer_id = f"cust-{random.randint(10000,99999)}"
-    status = random.choices(["completed", "voided", "pending"], weights=[93,4,3])[0]
-    transaction = {
-        "transaction_id": tx_id,
-        "timestamp": ts,
-        "store_id": store_id,
-        "terminal_id": terminal_id,
-        "cashier_id": cashier_id,
-        "items": items,
-        "totals": totals,
-        "payment_method": payment_method,
-        "approval_code": approval_code,
-        "customer_id": customer_id,
-        "currency": currency,
-        "status": status,
-    }
-    return transaction
-
-# --- Inter-request timing model ---
-def next_delay(mean_interval=1.0, burstiness=1.0):
-    """
-    Return next delay in seconds.
-    Uses exponential distribution (Poisson process) scaled by burstiness.
-    burstiness>1 increases variance, <1 decreases.
-    """
-    if mean_interval <= 0:
-        return 0.0
-    # exponential with rate = 1/mean
-    base = random.expovariate(1.0 / mean_interval)
-    # add small jitter
-    jitter = random.uniform(-0.1 * mean_interval, 0.1 * mean_interval)
-    delay = max(0.0, base * burstiness + jitter)
-    return delay
-
-# --- Streaming runner ---
-def stream_transactions(mode="console", count=None, mean_interval=1.0, burstiness=1.0,
-                        out_file=None, url=None, batch_size=1, store_ids=(1,2,3), currency="USD",
-                        seed=None):
-    if seed is not None:
-        random.seed(seed)
-    sent = 0
-    # try to import requests if HTTP mode
-    requests = None
-    if mode == "http":
-        try:
-            import requests as _r
-            requests = _r
-        except Exception as e:
-            print("requests not available; falling back to console mode. Install `requests` for HTTP POST support.")
-            mode = "console"
-
-    outfile = None
-    if mode == "file":
-        outfile = open(out_file or "transactions.ndjson", "a", encoding="utf-8")
-    try:
-        while True:
-            batch = []
-            for _ in range(batch_size):
-                tx = generate_transaction(store_ids=store_ids, currency=currency)
-                batch.append(tx)
-                sent += 1
-                # if count provided and reached, stop building more
-                if count and sent >= count:
-                    break
-            # dispatch batch
-            if mode == "console":
-                for tx in batch:
-                    print(json.dumps(tx, ensure_ascii=False))
-            elif mode == "file":
-                for tx in batch:
-                    outfile.write(json.dumps(tx, ensure_ascii=False) + "\n")
-                outfile.flush()
-            elif mode == "http" and requests:
-                # send each tx or the whole batch as chosen; here we send individual requests to mimic PoS
-                for tx in batch:
-                    try:
-                        r = requests.post(url, json=tx, timeout=5)
-                        print(f"POST {url} -> {r.status_code} ({r.reason})")
-                    except Exception as e:
-                        print("HTTP send failed:", e)
-            # exit if reached count
-            if count and sent >= count:
-                break
-            # compute next delay, but modulate by local time (simulate busier hours)
-            # local hour (0-23)
-            local_hour = datetime.now().hour
-            # multiplier: busier between 7-10 and 11-14 and 17-20 (coffee & lunch & dinner)
-            if 7 <= local_hour <= 10 or 11 <= local_hour <= 14 or 17 <= local_hour <= 20:
-                hour_multiplier = 0.5  # more frequent
-            else:
-                hour_multiplier = 1.5  # slower
-            delay = next_delay(mean_interval=mean_interval * hour_multiplier, burstiness=burstiness)
-            time.sleep(delay)
-    finally:
-        if outfile:
-            outfile.close()
-
-# --- If executed as script, provide CLI ---
-SCRIPT = """
-Save this block as pos_streamer.py and run with arguments, or use the function directly from Python.
+#!/usr/bin/env python3
+"""
+Real-time Data Generator for Retail Inventory Management
+Generates streaming events for sales, inventory updates, and customer activities
 """
 
-# For demonstration: generate 5 quick transactions printed to console.
+import argparse
+import json
+import time
+import uuid
+import random
+from datetime import datetime, timedelta
+import logging
+from typing import Dict, Any, List
+import sys
+import os
+
+# Add src to path for imports
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
+
+from producers.sales_producer import SalesProducer
+from producers.inventory_producer import InventoryProducer
+from config.settings import DATA_GENERATION_CONFIG
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+class RetailDataGenerator:
+    def __init__(self):
+        self.sales_producer = SalesProducer()
+        self.inventory_producer = InventoryProducer()
+        
+        # Load sample data
+        self.stores = self._load_sample_data("stores.json")
+        self.products = self._load_sample_data("products.json")
+        self.categories = self._load_sample_data("categories.json")
+        self.brands = self._load_sample_data("brands.json")
+        
+        # Configuration
+        self.config = DATA_GENERATION_CONFIG
+        
+        # Track inventory levels
+        self.inventory_levels = self._initialize_inventory()
+        
+        # Sales patterns
+        self.peak_hours = self.config["sales"]["peak_hours"]
+        self.weekend_multiplier = self.config["sales"]["weekend_multiplier"]
+        
+        logger.info("Retail Data Generator initialized")
+    
+    def _load_sample_data(self, filename: str) -> List[Dict[str, Any]]:
+        """Load sample data from JSON file"""
+        try:
+            with open(f"data/{filename}", 'r') as f:
+                return json.load(f)
+        except FileNotFoundError:
+            logger.warning(f"Sample data file {filename} not found. Run create_sample_data.py first.")
+            return []
+    
+    def _initialize_inventory(self) -> Dict[str, Dict[str, int]]:
+        """Initialize inventory levels for all products in all stores"""
+        inventory = {}
+        
+        for store in self.stores:
+            store_id = store["store_id"]
+            inventory[store_id] = {}
+            
+            for product in self.products:
+                product_id = product["sku"]
+                # Random initial stock between 20 and 200 units
+                inventory[store_id][product_id] = random.randint(20, 200)
+        
+        return inventory
+    
+    def _get_current_hour_multiplier(self) -> float:
+        """Get sales multiplier based on current hour"""
+        current_hour = datetime.now().hour
+        
+        if current_hour in self.peak_hours:
+            return 2.0  # Double sales during peak hours
+        elif current_hour >= 22 or current_hour <= 6:
+            return 0.3  # Reduced sales during night
+        else:
+            return 1.0  # Normal sales
+    
+    def _get_day_multiplier(self) -> float:
+        """Get sales multiplier based on day of week"""
+        current_day = datetime.now().weekday()
+        
+        if current_day >= 5:  # Saturday (5) or Sunday (6)
+            return self.weekend_multiplier
+        else:
+            return 1.0
+    
+    def generate_sales_transaction(self) -> Dict[str, Any]:
+        """Generate a single sales transaction"""
+        store = random.choice(self.stores)
+        product = random.choice(self.products)
+        
+        # Calculate quantity (usually 1-3 items, occasionally more)
+        quantity = random.choices(
+            [1, 2, 3, 4, 5, 10],
+            weights=[0.4, 0.3, 0.15, 0.08, 0.05, 0.02]
+        )[0]
+        
+        unit_price = product["unit_price"]
+        total_amount = round(quantity * unit_price, 2)
+        
+        transaction = {
+            "transaction_id": str(uuid.uuid4()),
+            "store_id": store["store_id"],
+            "product_id": product["sku"],
+            "quantity": quantity,
+            "unit_price": unit_price,
+            "total_amount": total_amount,
+            "timestamp": datetime.now().isoformat(),
+            "customer_id": f"CUST{random.randint(1000, 9999)}",
+            "payment_method": random.choice(["credit_card", "debit_card", "cash", "mobile_payment"]),
+            "store_region": store["region"],
+            "product_category": next(
+                (cat["category_name"] for cat in self.categories 
+                 if cat["category_key"] == product["category_key"]), "Unknown"
+            )
+        }
+        
+        return transaction
+    
+    def generate_inventory_update(self, store_id: str, product_id: str, 
+                                quantity_change: int, reason: str) -> Dict[str, Any]:
+        """Generate an inventory update event"""
+        current_level = self.inventory_levels[store_id][product_id]
+        new_level = max(0, current_level + quantity_change)
+        
+        # Update internal tracking
+        self.inventory_levels[store_id][product_id] = new_level
+        
+        update = {
+            "inventory_id": str(uuid.uuid4()),
+            "store_id": store_id,
+            "product_id": product_id,
+            "quantity_change": quantity_change,
+            "new_quantity": new_level,
+            "previous_quantity": current_level,
+            "reason": reason,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        return update
+    
+    def generate_restock_event(self) -> Dict[str, Any]:
+        """Generate a restock event for low inventory items"""
+        # Find products that need restocking
+        low_stock_items = []
+        
+        for store_id, products in self.inventory_levels.items():
+            for product_id, quantity in products.items():
+                if quantity <= 10:  # Low stock threshold
+                    low_stock_items.append((store_id, product_id, quantity))
+        
+        if not low_stock_items:
+            return None
+        
+        store_id, product_id, current_quantity = random.choice(low_stock_items)
+        restock_quantity = random.randint(50, 200)  # Restock amount
+        
+        restock_event = {
+            "restock_id": str(uuid.uuid4()),
+            "store_id": store_id,
+            "product_id": product_id,
+            "restock_quantity": restock_quantity,
+            "current_quantity": current_quantity,
+            "expected_delivery": (datetime.now() + timedelta(days=2)).isoformat(),
+            "supplier": "Auto-Restock System",
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        return restock_event
+    
+    def generate_price_change(self) -> Dict[str, Any]:
+        """Generate a price change event"""
+        product = random.choice(self.products)
+        current_price = product["unit_price"]
+        
+        # Small price changes more common than large ones
+        change_type = random.choices(["increase", "decrease", "no_change"], 
+                                   weights=[0.3, 0.4, 0.3])[0]
+        
+        if change_type == "no_change":
+            return None
+        
+        if change_type == "increase":
+            change_pct = random.uniform(0.01, 0.15)  # 1-15% increase
+        else:
+            change_pct = -random.uniform(0.01, 0.25)  # 1-25% decrease (sales/promotions)
+        
+        new_price = round(current_price * (1 + change_pct), 2)
+        
+        price_change = {
+            "price_change_id": str(uuid.uuid4()),
+            "product_id": product["sku"],
+            "old_price": current_price,
+            "new_price": new_price,
+            "change_pct": round(change_pct * 100, 2),
+            "reason": random.choice(["promotion", "cost_change", "seasonal", "clearance"]),
+            "effective_date": datetime.now().isoformat(),
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        # Update product price for future transactions
+        product["unit_price"] = new_price
+        
+        return price_change
+    
+    def generate_customer_event(self) -> Dict[str, Any]:
+        """Generate customer behavior event (foot traffic, browsing)"""
+        store = random.choice(self.stores)
+        
+        event_types = ["store_entrance", "browsing", "product_view", "cart_addition", "cart_removal"]
+        
+        event = {
+            "event_id": str(uuid.uuid4()),
+            "store_id": store["store_id"],
+            "customer_id": f"CUST{random.randint(1000, 9999)}",
+            "event_type": random.choice(event_types),
+            "product_id": random.choice(self.products)["sku"] if random.random() > 0.3 else None,
+            "session_duration": random.randint(30, 600),  # 30 seconds to 10 minutes
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        return event
+    
+    def run_simulation(self, duration_minutes: int = 60, events_per_minute: int = 10):
+        """Run the data generation simulation"""
+        logger.info(f"Starting simulation for {duration_minutes} minutes at {events_per_minute} events/minute")
+        
+        end_time = datetime.now() + timedelta(minutes=duration_minutes)
+        events_generated = 0
+        
+        try:
+            while datetime.now() < end_time:
+                # Calculate events for this second based on time patterns
+                hour_multiplier = self._get_current_hour_multiplier()
+                day_multiplier = self._get_day_multiplier()
+                events_this_second = max(1, int((events_per_minute / 60) * hour_multiplier * day_multiplier))
+                
+                for _ in range(events_this_second):
+                    # Distribute event types
+                    event_type = random.choices(
+                        ["sales", "inventory", "price_change", "customer", "restock"],
+                        weights=[0.5, 0.2, 0.1, 0.15, 0.05]
+                    )[0]
+                    
+                    if event_type == "sales" and self.stores and self.products:
+                        transaction = self.generate_sales_transaction()
+                        self.sales_producer.send_transaction(transaction)
+                        
+                        # Generate corresponding inventory update
+                        inventory_update = self.generate_inventory_update(
+                            transaction["store_id"],
+                            transaction["product_id"],
+                            -transaction["quantity"],  # Negative for sales
+                            "sale"
+                        )
+                        self.inventory_producer.send_update(inventory_update)
+                        
+                    elif event_type == "inventory" and self.stores and self.products:
+                        store = random.choice(self.stores)
+                        product = random.choice(self.products)
+                        reason = random.choice(["receipt", "adjustment", "damage", "theft"])
+                        quantity_change = random.randint(-5, 10)  # Small adjustments
+                        
+                        inventory_update = self.generate_inventory_update(
+                            store["store_id"],
+                            product["sku"],
+                            quantity_change,
+                            reason
+                        )
+                        self.inventory_producer.send_update(inventory_update)
+                        
+                    elif event_type == "price_change" and self.products:
+                        price_change = self.generate_price_change()
+                        if price_change:
+                            # Send to appropriate topic
+                            pass  # Price change producer would go here
+                        
+                    elif event_type == "customer" and self.stores:
+                        customer_event = self.generate_customer_event()
+                        # Send to customer events topic
+                        pass  # Customer events producer would go here
+                        
+                    elif event_type == "restock" and self.stores and self.products:
+                        restock_event = self.generate_restock_event()
+                        if restock_event:
+                            # Send to restock alerts topic
+                            pass  # Restock producer would go here
+                    
+                    events_generated += 1
+                
+                # Wait for next second
+                time.sleep(1)
+                
+                # Print progress every 30 seconds
+                if int(time.time()) % 30 == 0:
+                    remaining = (end_time - datetime.now()).total_seconds() / 60
+                    logger.info(f"Progress: {events_generated} events generated, {remaining:.1f} minutes remaining")
+        
+        except KeyboardInterrupt:
+            logger.info("Simulation interrupted by user")
+        
+        finally:
+            logger.info(f"Simulation completed. Total events generated: {events_generated}")
+            self.sales_producer.close()
+            self.inventory_producer.close()
+
+def main():
+    parser = argparse.ArgumentParser(description="Retail Data Generator")
+    parser.add_argument("--duration", type=int, default=60, help="Duration in minutes")
+    parser.add_argument("--rate", type=int, default=10, help="Events per minute")
+    parser.add_argument("--stores", type=int, help="Override store count")
+    parser.add_argument("--products", type=int, help="Override product count")
+    
+    args = parser.parse_args()
+    
+    # Check if sample data exists
+    if not os.path.exists("data/stores.json") or not os.path.exists("data/products.json"):
+        logger.error("Sample data not found. Please run create_sample_data.py first.")
+        return
+    
+    generator = RetailDataGenerator()
+    generator.run_simulation(
+        duration_minutes=args.duration,
+        events_per_minute=args.rate
+    )
+
 if __name__ == "__main__":
-    print("Demo: generating 5 sample transactions (fast)")
-    for i in range(5):
-        tx = generate_transaction(store_ids=(1,2,3), currency="USD")
-        print(json.dumps(tx, ensure_ascii=False))
-        time.sleep(0.05)
+    main()
