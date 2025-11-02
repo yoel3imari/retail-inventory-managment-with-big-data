@@ -114,11 +114,22 @@ EOF
 create_minio_buckets() {
     print_status "Creating MinIO buckets..."
     
-    # Wait for MinIO to be ready
+    # Wait for MinIO to be ready (using health check)
+    local max_attempts=30
+    local attempt=1
+    
     until curl -s http://localhost:9001/minio/health/live > /dev/null; do
-        print_warning "Waiting for MinIO to be ready..."
+        if [ $attempt -ge $max_attempts ]; then
+            print_error "MinIO failed to become ready after $max_attempts attempts"
+            exit 1
+        fi
+        print_warning "Waiting for MinIO to be ready... (attempt $attempt/$max_attempts)"
         sleep 5
+        attempt=$((attempt + 1))
     done
+    
+    # Additional wait to ensure MinIO is fully initialized
+    sleep 10
     
     # Create buckets using MinIO client inside the container
     docker exec minio mc mb --ignore-existing minio/retail-raw-data
@@ -133,11 +144,22 @@ create_minio_buckets() {
 create_kafka_topics() {
     print_status "Creating Kafka topics..."
     
-    # Wait for Kafka to be ready
+    # Wait for Kafka to be ready (using health check)
+    local max_attempts=30
+    local attempt=1
+    
     until docker exec kafka kafka-broker-api-versions --bootstrap-server localhost:9092 > /dev/null 2>&1; do
-        print_warning "Waiting for Kafka to be ready..."
+        if [ $attempt -ge $max_attempts ]; then
+            print_error "Kafka failed to become ready after $max_attempts attempts"
+            exit 1
+        fi
+        print_warning "Waiting for Kafka to be ready... (attempt $attempt/$max_attempts)"
         sleep 5
+        attempt=$((attempt + 1))
     done
+    
+    # Additional wait to ensure Kafka is fully initialized
+    sleep 10
     
     # Create topics
     docker exec kafka kafka-topics --create \
@@ -172,21 +194,38 @@ create_kafka_topics() {
 verify_clickhouse_schema() {
     print_status "Verifying ClickHouse schema..."
     
-    # Wait for ClickHouse to be ready
+    # Wait for ClickHouse to be ready (using health check)
+    local max_attempts=30
+    local attempt=1
+    
     until curl -s http://localhost:8123/ping > /dev/null; do
-        print_warning "Waiting for ClickHouse to be ready..."
+        if [ $attempt -ge $max_attempts ]; then
+            print_error "ClickHouse failed to become ready after $max_attempts attempts"
+            exit 1
+        fi
+        print_warning "Waiting for ClickHouse to be ready... (attempt $attempt/$max_attempts)"
         sleep 5
+        attempt=$((attempt + 1))
     done
     
-    # Wait a bit more for initialization script to complete
-    sleep 10
+    # Wait for initialization script to complete
+    print_status "Waiting for ClickHouse initialization to complete..."
+    sleep 20
     
     # Verify tables were created
     if docker exec clickhouse clickhouse-client --password clickhouse --query "SHOW TABLES FROM retail" | grep -q "fact_sales"; then
         print_status "ClickHouse schema verified successfully"
     else
         print_error "ClickHouse schema creation failed"
-        exit 1
+        print_warning "Retrying schema verification..."
+        sleep 10
+        # Try one more time
+        if docker exec clickhouse clickhouse-client --password clickhouse --query "SHOW TABLES FROM retail" | grep -q "fact_sales"; then
+            print_status "ClickHouse schema verified successfully on retry"
+        else
+            print_error "ClickHouse schema creation failed after retry"
+            exit 1
+        fi
     fi
 }
 
@@ -194,9 +233,18 @@ verify_clickhouse_schema() {
 wait_for_airflow() {
     print_status "Waiting for Airflow to be ready..."
     
+    local max_attempts=60
+    local attempt=1
+    
     until curl -s http://localhost:8081/health > /dev/null 2>&1; do
-        print_warning "Waiting for Airflow to be ready..."
+        if [ $attempt -ge $max_attempts ]; then
+            print_error "Airflow failed to become ready after $max_attempts attempts"
+            print_warning "Check Airflow logs with: docker logs airflow-webserver"
+            exit 1
+        fi
+        print_warning "Waiting for Airflow to be ready... (attempt $attempt/$max_attempts)"
         sleep 10
+        attempt=$((attempt + 1))
     done
     
     print_status "Airflow is ready"
@@ -206,17 +254,94 @@ wait_for_airflow() {
 wait_for_spark() {
     print_status "Waiting for Spark to be ready..."
     
+    local max_attempts=30
+    local attempt=1
+    
     until curl -s http://localhost:8082/ > /dev/null 2>&1; do
-        print_warning "Waiting for Spark to be ready..."
+        if [ $attempt -ge $max_attempts ]; then
+            print_error "Spark failed to become ready after $max_attempts attempts"
+            exit 1
+        fi
+        print_warning "Waiting for Spark to be ready... (attempt $attempt/$max_attempts)"
         sleep 5
+        attempt=$((attempt + 1))
     done
     
     print_status "Spark is ready"
 }
 
+# Check if service is healthy
+check_service_health() {
+    local service_name="$1"
+    local health_status
+    
+    health_status=$(docker inspect --format='{{.State.Health.Status}}' "$service_name" 2>/dev/null || echo "unknown")
+    
+    if [ "$health_status" = "healthy" ]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+# Wait for all services to be healthy
+wait_for_all_services() {
+    print_status "Waiting for all services to become healthy..."
+    
+    local services=("minio" "kafka" "clickhouse" "airflow-postgres" "airflow-redis" "spark-master")
+    local max_attempts=60
+    local all_healthy=false
+    
+    for attempt in $(seq 1 $max_attempts); do
+        local unhealthy_services=()
+        
+        for service in "${services[@]}"; do
+            if ! check_service_health "$service"; then
+                unhealthy_services+=("$service")
+            fi
+        done
+        
+        if [ ${#unhealthy_services[@]} -eq 0 ]; then
+            all_healthy=true
+            break
+        fi
+        
+        if [ $attempt -eq $max_attempts ]; then
+            print_error "Some services failed to become healthy after $max_attempts attempts:"
+            for service in "${unhealthy_services[@]}"; do
+                print_error "  - $service"
+            done
+            print_warning "You can check service logs with: docker logs <service_name>"
+            exit 1
+        fi
+        
+        print_warning "Waiting for services to become healthy... (attempt $attempt/$max_attempts)"
+        print_warning "Unhealthy services: ${unhealthy_services[*]}"
+        sleep 10
+    done
+    
+    if [ "$all_healthy" = true ]; then
+        print_status "All core services are healthy!"
+    fi
+}
+
 # Generate initial sample data
 generate_sample_data() {
     print_status "Generating initial sample data..."
+    
+    # Wait for data-generator to be healthy
+    local max_attempts=30
+    local attempt=1
+    
+    until check_service_health "data-generator"; do
+        if [ $attempt -ge $max_attempts ]; then
+            print_error "Data generator failed to become healthy after $max_attempts attempts"
+            exit 1
+        fi
+        print_warning "Waiting for data generator to be healthy... (attempt $attempt/$max_attempts)"
+        sleep 5
+        attempt=$((attempt + 1))
+    done
     
     # Create sample dimension data
     docker exec data-generator python scripts/create_sample_data.py \
@@ -270,6 +395,9 @@ main() {
     
     print_status "Starting services with Docker Compose..."
     docker-compose up -d
+    
+    # Wait for all core services to be healthy
+    wait_for_all_services
     
     # Wait for services and initialize
     create_minio_buckets

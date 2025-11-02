@@ -86,7 +86,8 @@ services:
     image: provectuslabs/kafka-ui:latest
     container_name: kafka-ui
     depends_on:
-      - kafka
+      kafka:
+        condition: service_healthy
     ports:
       - "8080:8080"
     environment:
@@ -100,8 +101,10 @@ services:
     image: apache/airflow:2.7.3
     container_name: airflow-webserver
     depends_on:
-      - airflow-postgres
-      - airflow-redis
+      airflow-postgres:
+        condition: service_healthy
+      airflow-redis:
+        condition: service_healthy
     environment:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@airflow-postgres:5432/airflow
@@ -127,6 +130,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
+      start_period: 60s
     networks:
       - dev-network
 
@@ -139,12 +143,24 @@ services:
       POSTGRES_DB: airflow
     volumes:
       - airflow_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airflow -d airflow"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
     networks:
       - dev-network
 
   airflow-redis:
     image: redis:7-alpine
     container_name: airflow-redis
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     networks:
       - dev-network
 
@@ -163,6 +179,12 @@ services:
     volumes:
       - ./spark_jobs:/opt/spark/jobs
       - ./config:/opt/spark/conf
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
     networks:
       - dev-network
 
@@ -170,7 +192,8 @@ services:
     image: apache/spark:3.4.1
     container_name: spark-worker
     depends_on:
-      - spark-master
+      spark-master:
+        condition: service_healthy
     command: >
       bash -c "
         /opt/spark/sbin/start-worker.sh spark://spark-master:7077 &&
@@ -182,6 +205,12 @@ services:
     volumes:
       - ./spark_jobs:/opt/spark/jobs
       - ./config:/opt/spark/conf
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
     networks:
       - dev-network
 
@@ -192,8 +221,10 @@ services:
       dockerfile: docker/data-generator/Dockerfile
     container_name: data-generator
     depends_on:
-      - kafka
-      - clickhouse
+      kafka:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
     environment:
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
       - CLICKHOUSE_HOST=clickhouse
@@ -202,6 +233,12 @@ services:
     volumes:
       - ./scripts:/app/scripts
       - ./src:/app/src
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     networks:
       - dev-network
 

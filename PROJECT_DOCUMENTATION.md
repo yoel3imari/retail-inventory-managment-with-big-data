@@ -327,6 +327,12 @@ Data Generator  Real-time   ML Training  Airflow DAGs
 - Compute optimization
 - Monitoring and adjustment
 
+## Web Interfaces (Accessible Now)
+- **Kafka UI**: http://localhost:8080 - Monitor Kafka topics and messages
+- **MinIO Console**: http://localhost:9001 - Object storage management (minioadmin/minioadmin)
+- **Spark Master UI**: http://localhost:8082 - Monitor Spark applications
+- **ClickHouse HTTP**: http://localhost:8123 - Database interface
+
 ## Conclusion
 
 This project provides a comprehensive foundation for understanding and implementing big data solutions in retail inventory management. It demonstrates modern data engineering practices while maintaining academic rigor and practical applicability.

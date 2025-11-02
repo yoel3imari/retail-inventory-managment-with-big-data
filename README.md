@@ -47,10 +47,6 @@ This project simulates a retail chain's data infrastructure, processing real-tim
 ### Setup
 
 1. **Create project structure**:
-```bash
-mkdir -p retail-inventory-project/{scripts,notebooks,clickhouse/init,data}
-cd retail-inventory-project
-```
 
 2. **Save the Docker Compose file** as `docker-compose.yml`
 
