@@ -11,6 +11,7 @@ This application:
 
 import json
 import logging
+import io
 from datetime import datetime
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import *
@@ -294,26 +295,74 @@ class BatchProcessing:
             raise
     
     def save_results(self, daily_sales, inventory_kpis, product_performance, store_performance, daily_report):
-        """Save batch processing results"""
+        """Save batch processing results to MinIO distributed storage"""
         try:
-            # Save to temporary storage (in production, this would save to ClickHouse)
+            from minio import Minio
+            import tempfile
+            import os
+            
+            # Initialize MinIO client
+            minio_client = Minio(
+                "minio:9000",
+                access_key="minioadmin",
+                secret_key="minioadmin",
+                secure=False
+            )
+            
+            # Ensure processed data bucket exists
+            bucket_name = "retail-processed-data"
+            if not minio_client.bucket_exists(bucket_name):
+                minio_client.make_bucket(bucket_name)
+                logger.info(f"Created MinIO bucket: {bucket_name}")
+            
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             
-            # Write results to local files (for demo purposes)
-            daily_sales.write.mode("overwrite").parquet(f"/tmp/batch_results/daily_sales_{timestamp}")
-            inventory_kpis.write.mode("overwrite").parquet(f"/tmp/batch_results/inventory_kpis_{timestamp}")
-            product_performance.write.mode("overwrite").parquet(f"/tmp/batch_results/product_performance_{timestamp}")
-            store_performance.write.mode("overwrite").parquet(f"/tmp/batch_results/store_performance_{timestamp}")
+            # Save each DataFrame to MinIO as Parquet files
+            datasets = {
+                "daily_sales": daily_sales,
+                "inventory_kpis": inventory_kpis,
+                "product_performance": product_performance,
+                "store_performance": store_performance
+            }
             
-            # Save daily report as JSON
+            for dataset_name, dataset in datasets.items():
+                # Create temporary directory for Parquet files
+                with tempfile.TemporaryDirectory() as temp_dir:
+                    local_path = f"{temp_dir}/{dataset_name}"
+                    
+                    # Write DataFrame to temporary Parquet files
+                    dataset.write.mode("overwrite").parquet(local_path)
+                    
+                    # Upload Parquet files to MinIO
+                    for root, dirs, files in os.walk(local_path):
+                        for file in files:
+                            local_file_path = os.path.join(root, file)
+                            object_name = f"batch_results/{timestamp}/{dataset_name}/{file}"
+                            
+                            minio_client.fput_object(
+                                bucket_name,
+                                object_name,
+                                local_file_path
+                            )
+                    
+                    logger.info(f"Dataset {dataset_name} saved to MinIO bucket: {bucket_name}")
+            
+            # Save daily report as JSON to MinIO
             import json
-            with open(f"/tmp/batch_results/daily_report_{timestamp}.json", "w") as f:
-                json.dump(daily_report, f, indent=2)
+            report_json = json.dumps(daily_report, indent=2)
+            report_object_name = f"batch_results/{timestamp}/daily_report.json"
             
-            logger.info("Batch processing results saved successfully")
+            minio_client.put_object(
+                bucket_name,
+                report_object_name,
+                data=io.BytesIO(report_json.encode('utf-8')),
+                length=len(report_json)
+            )
+            
+            logger.info(f"Daily report saved to MinIO: {report_object_name}")
             
         except Exception as e:
-            logger.error(f"Failed to save batch processing results: {e}")
+            logger.error(f"Failed to save batch processing results to MinIO: {e}")
             raise
     
     def run_batch_processing(self):

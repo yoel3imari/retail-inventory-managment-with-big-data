@@ -10,10 +10,12 @@ This application:
 """
 
 import logging
+import os
 from datetime import datetime, timedelta
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import *
 from pyspark.sql.types import *
+from pyspark.sql.window import Window
 from pyspark.ml.feature import VectorAssembler, StringIndexer, OneHotEncoder
 from pyspark.ml.regression import RandomForestRegressor, GBTRegressor
 from pyspark.ml.evaluation import RegressionEvaluator
@@ -39,8 +41,9 @@ class MLTrainingProcessor:
                 .config("spark.sql.adaptive.coalescePartitions.enabled", "true") \
                 .config("spark.executor.memory", "2g") \
                 .config("spark.driver.memory", "2g") \
-                .config("spark.jars.packages", 
+                .config("spark.jars.packages",
                        "com.clickhouse:clickhouse-jdbc:0.4.6") \
+                .config("spark.jars.repositories", "https://repo1.maven.org/maven2/") \
                 .getOrCreate()
             
             logger.info("Spark session for ML training initialized successfully")
@@ -301,18 +304,52 @@ class MLTrainingProcessor:
             raise
     
     def save_models(self):
-        """Save trained models to MinIO (or local storage for demo)"""
+        """Save trained models to MinIO distributed storage"""
         try:
-            import os
-            os.makedirs("/tmp/models", exist_ok=True)
+            from minio import Minio
+            from minio.error import S3Error
+            import tempfile
+            import shutil
             
+            # Initialize MinIO client
+            minio_client = Minio(
+                "minio:9000",
+                access_key="minioadmin",
+                secret_key="minioadmin",
+                secure=False
+            )
+            
+            # Ensure models bucket exists
+            bucket_name = "retail-models"
+            if not minio_client.bucket_exists(bucket_name):
+                minio_client.make_bucket(bucket_name)
+                logger.info(f"Created MinIO bucket: {bucket_name}")
+            
+            # Save each model to MinIO
             for model_name, model in self.models.items():
-                model_path = f"/tmp/models/{model_name}"
-                model.write().overwrite().save(model_path)
-                logger.info(f"Model {model_name} saved to {model_path}")
+                # Create temporary directory for model files
+                with tempfile.TemporaryDirectory() as temp_dir:
+                    model_path = f"{temp_dir}/{model_name}"
+                    
+                    # Save model to temporary directory
+                    model.write().overwrite().save(model_path)
+                    
+                    # Upload model files to MinIO
+                    for root, dirs, files in os.walk(model_path):
+                        for file in files:
+                            local_file_path = os.path.join(root, file)
+                            object_name = f"{model_name}/{file}"
+                            
+                            minio_client.fput_object(
+                                bucket_name,
+                                object_name,
+                                local_file_path
+                            )
+                    
+                    logger.info(f"Model {model_name} saved to MinIO bucket: {bucket_name}")
                 
         except Exception as e:
-            logger.error(f"Failed to save models: {e}")
+            logger.error(f"Failed to save models to MinIO: {e}")
             raise
     
     def generate_predictions(self, future_date):

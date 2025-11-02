@@ -46,6 +46,21 @@ MINIO_BUCKETS = {
     "features": "retail-features",
 }
 
+# MinIO Storage Paths
+MINIO_PATHS = {
+    "models": {
+        "demand_forecasting": "models/demand_forecasting",
+        "stock_optimization": "models/stock_optimization",
+        "anomaly_detection": "models/anomaly_detection"
+    },
+    "data": {
+        "batch_results": "batch_results",
+        "streaming_checkpoints": "streaming_checkpoints",
+        "feature_store": "feature_store",
+        "reports": "reports"
+    }
+}
+
 # ClickHouse Configuration
 CLICKHOUSE_CONFIG = {
     "host": os.getenv("CLICKHOUSE_HOST", "clickhouse"),
