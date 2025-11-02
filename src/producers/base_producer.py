@@ -37,7 +37,6 @@ class BaseProducer:
         
         try:
             self.producer = KafkaProducer(
-                bootstrap_servers=KAFKA_CONFIG['bootstrap_servers'],
                 value_serializer=lambda v: json.dumps(v).encode('utf-8'),
                 **producer_config
             )

@@ -1,0 +1,352 @@
+[
+  {
+    "brand_key": "4f56e05f-dbdc-4633-9d2c-0400e398164a",
+    "brand_name": "Apple",
+    "category_key": "008e4eca-44cf-4614-adba-534a0395ee2c",
+    "description": "Apple brand products",
+    "created_date": "2025-11-02T15:33:01.203267"
+  },
+  {
+    "brand_key": "38daba19-0859-414e-8a15-ca14529eb28f",
+    "brand_name": "Samsung",
+    "category_key": "008e4eca-44cf-4614-adba-534a0395ee2c",
+    "description": "Samsung brand products",
+    "created_date": "2025-11-02T15:33:01.203295"
+  },
+  {
+    "brand_key": "ff76f07f-935b-4b31-863b-28d107f59a0f",
+    "brand_name": "Sony",
+    "category_key": "008e4eca-44cf-4614-adba-534a0395ee2c",
+    "description": "Sony brand products",
+    "created_date": "2025-11-02T15:33:01.203309"
+  },
+  {
+    "brand_key": "e471dd94-a5c4-42d2-a781-6b69b5dbfa29",
+    "brand_name": "LG",
+    "category_key": "008e4eca-44cf-4614-adba-534a0395ee2c",
+    "description": "LG brand products",
+    "created_date": "2025-11-02T15:33:01.203321"
+  },
+  {
+    "brand_key": "e6029f9c-5a31-4be4-9dcc-0a85694ed876",
+    "brand_name": "Dell",
+    "category_key": "008e4eca-44cf-4614-adba-534a0395ee2c",
+    "description": "Dell brand products",
+    "created_date": "2025-11-02T15:33:01.203332"
+  },
+  {
+    "brand_key": "4c202496-8f0c-40b6-be28-b1fff6f0374f",
+    "brand_name": "Nike",
+    "category_key": "fbad871a-b966-43e8-9dae-f50f8eb6805d",
+    "description": "Nike brand products",
+    "created_date": "2025-11-02T15:33:01.203345"
+  },
+  {
+    "brand_key": "a7a6af49-3a87-4aa8-9a04-817fe275348d",
+    "brand_name": "Adidas",
+    "category_key": "fbad871a-b966-43e8-9dae-f50f8eb6805d",
+    "description": "Adidas brand products",
+    "created_date": "2025-11-02T15:33:01.203355"
+  },
+  {
+    "brand_key": "cd1b46f6-322e-4b7c-a27c-821e3807cb87",
+    "brand_name": "Zara",
+    "category_key": "fbad871a-b966-43e8-9dae-f50f8eb6805d",
+    "description": "Zara brand products",
+    "created_date": "2025-11-02T15:33:01.203366"
+  },
+  {
+    "brand_key": "b8839300-e960-4c02-b130-4e34815c2a78",
+    "brand_name": "H&M",
+    "category_key": "fbad871a-b966-43e8-9dae-f50f8eb6805d",
+    "description": "H&M brand products",
+    "created_date": "2025-11-02T15:33:01.203378"
+  },
+  {
+    "brand_key": "d59366d4-8a54-4943-974f-36675065680d",
+    "brand_name": "Levi's",
+    "category_key": "fbad871a-b966-43e8-9dae-f50f8eb6805d",
+    "description": "Levi's brand products",
+    "created_date": "2025-11-02T15:33:01.203389"
+  },
+  {
+    "brand_key": "f97d0219-12eb-4af8-9883-de3ce97333ba",
+    "brand_name": "Coca-Cola",
+    "category_key": "b5077366-2fcc-49fd-af32-2980fded5766",
+    "description": "Coca-Cola brand products",
+    "created_date": "2025-11-02T15:33:01.203401"
+  },
+  {
+    "brand_key": "b9c2f664-77ce-41bc-9bb5-e70aaee5b2f0",
+    "brand_name": "Nestle",
+    "category_key": "b5077366-2fcc-49fd-af32-2980fded5766",
+    "description": "Nestle brand products",
+    "created_date": "2025-11-02T15:33:01.203412"
+  },
+  {
+    "brand_key": "f65fb216-5cba-4246-bc34-893a27758fe0",
+    "brand_name": "Kellogg's",
+    "category_key": "b5077366-2fcc-49fd-af32-2980fded5766",
+    "description": "Kellogg's brand products",
+    "created_date": "2025-11-02T15:33:01.203423"
+  },
+  {
+    "brand_key": "be58e802-48de-4d8e-a935-7e17027418ba",
+    "brand_name": "Heinz",
+    "category_key": "b5077366-2fcc-49fd-af32-2980fded5766",
+    "description": "Heinz brand products",
+    "created_date": "2025-11-02T15:33:01.203434"
+  },
+  {
+    "brand_key": "ad7eb55e-0295-479c-831f-4d6f60c368b5",
+    "brand_name": "PepsiCo",
+    "category_key": "b5077366-2fcc-49fd-af32-2980fded5766",
+    "description": "PepsiCo brand products",
+    "created_date": "2025-11-02T15:33:01.203445"
+  },
+  {
+    "brand_key": "0ad4984c-69c0-46d4-91d5-714d083c845b",
+    "brand_name": "IKEA",
+    "category_key": "0dfca734-f615-49a0-b0f0-b96d791d2b37",
+    "description": "IKEA brand products",
+    "created_date": "2025-11-02T15:33:01.203458"
+  },
+  {
+    "brand_key": "a49e8058-552d-4883-947a-0a826fb4d27f",
+    "brand_name": "Home Depot",
+    "category_key": "0dfca734-f615-49a0-b0f0-b96d791d2b37",
+    "description": "Home Depot brand products",
+    "created_date": "2025-11-02T15:33:01.203469"
+  },
+  {
+    "brand_key": "9615ff8c-8662-4653-b3bd-71ecf3c13395",
+    "brand_name": "Scotts",
+    "category_key": "0dfca734-f615-49a0-b0f0-b96d791d2b37",
+    "description": "Scotts brand products",
+    "created_date": "2025-11-02T15:33:01.203480"
+  },
+  {
+    "brand_key": "ddf25fe1-a94c-4a4e-99f1-54c1ab306d72",
+    "brand_name": "Weber",
+    "category_key": "0dfca734-f615-49a0-b0f0-b96d791d2b37",
+    "description": "Weber brand products",
+    "created_date": "2025-11-02T15:33:01.203492"
+  },
+  {
+    "brand_key": "0dcf431e-56ad-49c4-a600-c791ddd329fb",
+    "brand_name": "Black & Decker",
+    "category_key": "0dfca734-f615-49a0-b0f0-b96d791d2b37",
+    "description": "Black & Decker brand products",
+    "created_date": "2025-11-02T15:33:01.203501"
+  },
+  {
+    "brand_key": "bf92f0b1-637e-4009-a6f3-c31fe13f3256",
+    "brand_name": "Nike",
+    "category_key": "775030f3-1a3a-4a2d-9d79-8a439ab0884a",
+    "description": "Nike brand products",
+    "created_date": "2025-11-02T15:33:01.203541"
+  },
+  {
+    "brand_key": "0fd54e26-55b8-41e0-b974-51809efd93f2",
+    "brand_name": "Adidas",
+    "category_key": "775030f3-1a3a-4a2d-9d79-8a439ab0884a",
+    "description": "Adidas brand products",
+    "created_date": "2025-11-02T15:33:01.203553"
+  },
+  {
+    "brand_key": "1ef4f5dd-a3f5-4c6c-b6b4-49820bcb5a95",
+    "brand_name": "Under Armour",
+    "category_key": "775030f3-1a3a-4a2d-9d79-8a439ab0884a",
+    "description": "Under Armour brand products",
+    "created_date": "2025-11-02T15:33:01.203571"
+  },
+  {
+    "brand_key": "b76c2935-8481-4e23-9fce-2f6ebb358734",
+    "brand_name": "Columbia",
+    "category_key": "775030f3-1a3a-4a2d-9d79-8a439ab0884a",
+    "description": "Columbia brand products",
+    "created_date": "2025-11-02T15:33:01.203583"
+  },
+  {
+    "brand_key": "34a62a7f-578e-46f2-9474-c08e8eaf60c7",
+    "brand_name": "The North Face",
+    "category_key": "775030f3-1a3a-4a2d-9d79-8a439ab0884a",
+    "description": "The North Face brand products",
+    "created_date": "2025-11-02T15:33:01.203594"
+  },
+  {
+    "brand_key": "39af90d7-1304-4878-af49-16186f793b3b",
+    "brand_name": "L'Oreal",
+    "category_key": "f57324a4-646d-400f-80a0-96a6122d15a6",
+    "description": "L'Oreal brand products",
+    "created_date": "2025-11-02T15:33:01.203606"
+  },
+  {
+    "brand_key": "8f6de4c5-ef31-4066-8f80-f6579ffbeeaf",
+    "brand_name": "Procter & Gamble",
+    "category_key": "f57324a4-646d-400f-80a0-96a6122d15a6",
+    "description": "Procter & Gamble brand products",
+    "created_date": "2025-11-02T15:33:01.203617"
+  },
+  {
+    "brand_key": "2c7c728c-a664-4010-91b6-bd6cb607669b",
+    "brand_name": "Estee Lauder",
+    "category_key": "f57324a4-646d-400f-80a0-96a6122d15a6",
+    "description": "Estee Lauder brand products",
+    "created_date": "2025-11-02T15:33:01.203627"
+  },
+  {
+    "brand_key": "b217894e-80df-470e-bf80-2c4034275ec2",
+    "brand_name": "Johnson & Johnson",
+    "category_key": "f57324a4-646d-400f-80a0-96a6122d15a6",
+    "description": "Johnson & Johnson brand products",
+    "created_date": "2025-11-02T15:33:01.203637"
+  },
+  {
+    "brand_key": "e06e1594-9d16-4e47-8b22-9162ecee0fc1",
+    "brand_name": "Unilever",
+    "category_key": "f57324a4-646d-400f-80a0-96a6122d15a6",
+    "description": "Unilever brand products",
+    "created_date": "2025-11-02T15:33:01.203647"
+  },
+  {
+    "brand_key": "d182c605-865c-4ab3-bc71-9b4bfbbd8897",
+    "brand_name": "Lego",
+    "category_key": "1b26ccf2-789f-4c05-ba9b-0e9ec8ee48d5",
+    "description": "Lego brand products",
+    "created_date": "2025-11-02T15:33:01.203662"
+  },
+  {
+    "brand_key": "280a87c9-b199-43a0-b67f-f24f3d74a7f4",
+    "brand_name": "Hasbro",
+    "category_key": "1b26ccf2-789f-4c05-ba9b-0e9ec8ee48d5",
+    "description": "Hasbro brand products",
+    "created_date": "2025-11-02T15:33:01.203674"
+  },
+  {
+    "brand_key": "44bbfa8a-1d4a-41cf-9eb9-be0504885429",
+    "brand_name": "Mattel",
+    "category_key": "1b26ccf2-789f-4c05-ba9b-0e9ec8ee48d5",
+    "description": "Mattel brand products",
+    "created_date": "2025-11-02T15:33:01.203684"
+  },
+  {
+    "brand_key": "6e6f908e-95fc-428f-8780-bff061ffd756",
+    "brand_name": "Nintendo",
+    "category_key": "1b26ccf2-789f-4c05-ba9b-0e9ec8ee48d5",
+    "description": "Nintendo brand products",
+    "created_date": "2025-11-02T15:33:01.203694"
+  },
+  {
+    "brand_key": "3160af72-3d32-4b60-9a8e-6b87a7e561bf",
+    "brand_name": "Fisher-Price",
+    "category_key": "1b26ccf2-789f-4c05-ba9b-0e9ec8ee48d5",
+    "description": "Fisher-Price brand products",
+    "created_date": "2025-11-02T15:33:01.203709"
+  },
+  {
+    "brand_key": "6aa98898-938d-44c6-a700-3cfc0a1ac983",
+    "brand_name": "Penguin",
+    "category_key": "276a7663-d15d-4007-bedc-36f7bedc2cdf",
+    "description": "Penguin brand products",
+    "created_date": "2025-11-02T15:33:01.203729"
+  },
+  {
+    "brand_key": "0ec2c83a-a127-4adf-b0b5-9e2416cddbb0",
+    "brand_name": "HarperCollins",
+    "category_key": "276a7663-d15d-4007-bedc-36f7bedc2cdf",
+    "description": "HarperCollins brand products",
+    "created_date": "2025-11-02T15:33:01.203742"
+  },
+  {
+    "brand_key": "fe51f2c2-902d-4073-a7a8-d90b35600947",
+    "brand_name": "Random House",
+    "category_key": "276a7663-d15d-4007-bedc-36f7bedc2cdf",
+    "description": "Random House brand products",
+    "created_date": "2025-11-02T15:33:01.203753"
+  },
+  {
+    "brand_key": "34cee0f4-e555-47b8-83a2-54b0130199b7",
+    "brand_name": "Scholastic",
+    "category_key": "276a7663-d15d-4007-bedc-36f7bedc2cdf",
+    "description": "Scholastic brand products",
+    "created_date": "2025-11-02T15:33:01.203766"
+  },
+  {
+    "brand_key": "d9e893d4-f796-49c4-bf4c-e3d58d527b26",
+    "brand_name": "Disney",
+    "category_key": "276a7663-d15d-4007-bedc-36f7bedc2cdf",
+    "description": "Disney brand products",
+    "created_date": "2025-11-02T15:33:01.203787"
+  },
+  {
+    "brand_key": "6db72ab1-0277-4da5-a681-d3b059f3a78b",
+    "brand_name": "Toyota",
+    "category_key": "b94a3e54-6dfb-4e1c-81e9-69420edaadcc",
+    "description": "Toyota brand products",
+    "created_date": "2025-11-02T15:33:01.203811"
+  },
+  {
+    "brand_key": "2cd7e734-2e62-4e38-8e14-02c0dca52919",
+    "brand_name": "Ford",
+    "category_key": "b94a3e54-6dfb-4e1c-81e9-69420edaadcc",
+    "description": "Ford brand products",
+    "created_date": "2025-11-02T15:33:01.203823"
+  },
+  {
+    "brand_key": "51dc3669-227e-4e1b-aa49-0eff2598e49e",
+    "brand_name": "Honda",
+    "category_key": "b94a3e54-6dfb-4e1c-81e9-69420edaadcc",
+    "description": "Honda brand products",
+    "created_date": "2025-11-02T15:33:01.203834"
+  },
+  {
+    "brand_key": "a5464b7e-5249-447c-8e5c-a863818f672a",
+    "brand_name": "BMW",
+    "category_key": "b94a3e54-6dfb-4e1c-81e9-69420edaadcc",
+    "description": "BMW brand products",
+    "created_date": "2025-11-02T15:33:01.203850"
+  },
+  {
+    "brand_key": "c6f69c43-6c68-462b-a817-9e6d8e66bbce",
+    "brand_name": "Mercedes-Benz",
+    "category_key": "b94a3e54-6dfb-4e1c-81e9-69420edaadcc",
+    "description": "Mercedes-Benz brand products",
+    "created_date": "2025-11-02T15:33:01.203861"
+  },
+  {
+    "brand_key": "d611ecf5-dd6c-4248-8ada-c2fd75b41680",
+    "brand_name": "Pfizer",
+    "category_key": "82936963-3277-4932-8edc-910dbae883de",
+    "description": "Pfizer brand products",
+    "created_date": "2025-11-02T15:33:01.203872"
+  },
+  {
+    "brand_key": "2f759469-340f-4887-958e-46aba1083d70",
+    "brand_name": "Novartis",
+    "category_key": "82936963-3277-4932-8edc-910dbae883de",
+    "description": "Novartis brand products",
+    "created_date": "2025-11-02T15:33:01.203883"
+  },
+  {
+    "brand_key": "07d9166c-b474-4c02-a455-d5bb53830b06",
+    "brand_name": "Roche",
+    "category_key": "82936963-3277-4932-8edc-910dbae883de",
+    "description": "Roche brand products",
+    "created_date": "2025-11-02T15:33:01.203894"
+  },
+  {
+    "brand_key": "0e663e7f-999e-41a1-994e-f4bff0b123f3",
+    "brand_name": "Merck",
+    "category_key": "82936963-3277-4932-8edc-910dbae883de",
+    "description": "Merck brand products",
+    "created_date": "2025-11-02T15:33:01.203905"
+  },
+  {
+    "brand_key": "6907f94b-49e1-41ad-9b53-7a5ddb437014",
+    "brand_name": "GlaxoSmithKline",
+    "category_key": "82936963-3277-4932-8edc-910dbae883de",
+    "description": "GlaxoSmithKline brand products",
+    "created_date": "2025-11-02T15:33:01.203915"
+  }
+]

@@ -17,7 +17,7 @@ KAFKA_CONFIG = {
     "retries": 3,
     "batch_size": 16384,
     "linger_ms": 10,
-    "compression_type": "snappy",
+    "compression_type": "gzip",
 }
 
 # Kafka Topics
