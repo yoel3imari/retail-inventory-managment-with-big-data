@@ -1,0 +1,112 @@
+[
+  {
+    "store_key": "c4446ecd-700d-438d-b8c2-af3715ec922f",
+    "store_id": "STORE100",
+    "store_name": "Charlotte Convenience Store",
+    "city": "Charlotte",
+    "region": "South",
+    "country": "USA",
+    "square_footage": 20000,
+    "store_type": "Convenience Store",
+    "created_date": "2025-11-02T15:33:01.216248"
+  },
+  {
+    "store_key": "cad9b148-fa9c-4f68-acb7-e4ee8764a4c7",
+    "store_id": "STORE101",
+    "store_name": "Kansas City Hypermarket",
+    "city": "Kansas City",
+    "region": "Central",
+    "country": "USA",
+    "square_footage": 20000,
+    "store_type": "Hypermarket",
+    "created_date": "2025-11-02T15:33:01.216284"
+  },
+  {
+    "store_key": "98073f71-af05-4187-834e-a3f01bfb5542",
+    "store_id": "STORE102",
+    "store_name": "Washington DC Hypermarket",
+    "city": "Washington DC",
+    "region": "East",
+    "country": "USA",
+    "square_footage": 10000,
+    "store_type": "Hypermarket",
+    "created_date": "2025-11-02T15:33:01.216305"
+  },
+  {
+    "store_key": "445e16bd-7f32-4c17-9f7c-085ca2c12836",
+    "store_id": "STORE103",
+    "store_name": "Houston Hypermarket",
+    "city": "Houston",
+    "region": "South",
+    "country": "USA",
+    "square_footage": 15000,
+    "store_type": "Hypermarket",
+    "created_date": "2025-11-02T15:33:01.216324"
+  },
+  {
+    "store_key": "f99c2eda-0083-430e-b23d-eac270d5eda9",
+    "store_id": "STORE104",
+    "store_name": "Richmond Specialty Store",
+    "city": "Richmond",
+    "region": "East",
+    "country": "USA",
+    "square_footage": 25000,
+    "store_type": "Specialty Store",
+    "created_date": "2025-11-02T15:33:01.216343"
+  },
+  {
+    "store_key": "9ecea7bc-0063-411c-8b35-f1f36f29a4b3",
+    "store_id": "STORE105",
+    "store_name": "New York Convenience Store",
+    "city": "New York",
+    "region": "North",
+    "country": "USA",
+    "square_footage": 25000,
+    "store_type": "Convenience Store",
+    "created_date": "2025-11-02T15:33:01.216362"
+  },
+  {
+    "store_key": "85e8a894-9f67-4cd9-800c-7018392e7760",
+    "store_id": "STORE106",
+    "store_name": "Raleigh Hypermarket",
+    "city": "Raleigh",
+    "region": "East",
+    "country": "USA",
+    "square_footage": 20000,
+    "store_type": "Hypermarket",
+    "created_date": "2025-11-02T15:33:01.216380"
+  },
+  {
+    "store_key": "05a8c3cd-eeff-4316-b880-cb243d7f3ef3",
+    "store_id": "STORE107",
+    "store_name": "Minneapolis Specialty Store",
+    "city": "Minneapolis",
+    "region": "Central",
+    "country": "USA",
+    "square_footage": 25000,
+    "store_type": "Specialty Store",
+    "created_date": "2025-11-02T15:33:01.217162"
+  },
+  {
+    "store_key": "0d660e09-a5eb-4bbd-93c5-3c9a5393b8f4",
+    "store_id": "STORE108",
+    "store_name": "Atlanta Department Store",
+    "city": "Atlanta",
+    "region": "South",
+    "country": "USA",
+    "square_footage": 25000,
+    "store_type": "Department Store",
+    "created_date": "2025-11-02T15:33:01.217227"
+  },
+  {
+    "store_key": "eaaf8cac-7f2a-4678-808d-7ad86f9f1cbe",
+    "store_id": "STORE109",
+    "store_name": "Denver Hypermarket",
+    "city": "Denver",
+    "region": "West",
+    "country": "USA",
+    "square_footage": 10000,
+    "store_type": "Hypermarket",
+    "created_date": "2025-11-02T15:33:01.217300"
+  }
+]

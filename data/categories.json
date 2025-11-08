@@ -1,0 +1,62 @@
+[
+  {
+    "category_key": "008e4eca-44cf-4614-adba-534a0395ee2c",
+    "category_name": "Electronics",
+    "description": "Products in Electronics category",
+    "created_date": "2025-11-02T15:33:01.201237"
+  },
+  {
+    "category_key": "fbad871a-b966-43e8-9dae-f50f8eb6805d",
+    "category_name": "Clothing",
+    "description": "Products in Clothing category",
+    "created_date": "2025-11-02T15:33:01.201275"
+  },
+  {
+    "category_key": "b5077366-2fcc-49fd-af32-2980fded5766",
+    "category_name": "Food & Beverages",
+    "description": "Products in Food & Beverages category",
+    "created_date": "2025-11-02T15:33:01.201292"
+  },
+  {
+    "category_key": "0dfca734-f615-49a0-b0f0-b96d791d2b37",
+    "category_name": "Home & Garden",
+    "description": "Products in Home & Garden category",
+    "created_date": "2025-11-02T15:33:01.201305"
+  },
+  {
+    "category_key": "775030f3-1a3a-4a2d-9d79-8a439ab0884a",
+    "category_name": "Sports & Outdoors",
+    "description": "Products in Sports & Outdoors category",
+    "created_date": "2025-11-02T15:33:01.201317"
+  },
+  {
+    "category_key": "f57324a4-646d-400f-80a0-96a6122d15a6",
+    "category_name": "Beauty & Personal Care",
+    "description": "Products in Beauty & Personal Care category",
+    "created_date": "2025-11-02T15:33:01.201328"
+  },
+  {
+    "category_key": "1b26ccf2-789f-4c05-ba9b-0e9ec8ee48d5",
+    "category_name": "Toys & Games",
+    "description": "Products in Toys & Games category",
+    "created_date": "2025-11-02T15:33:01.201339"
+  },
+  {
+    "category_key": "276a7663-d15d-4007-bedc-36f7bedc2cdf",
+    "category_name": "Books & Media",
+    "description": "Products in Books & Media category",
+    "created_date": "2025-11-02T15:33:01.201350"
+  },
+  {
+    "category_key": "b94a3e54-6dfb-4e1c-81e9-69420edaadcc",
+    "category_name": "Automotive",
+    "description": "Products in Automotive category",
+    "created_date": "2025-11-02T15:33:01.201362"
+  },
+  {
+    "category_key": "82936963-3277-4932-8edc-910dbae883de",
+    "category_name": "Health & Wellness",
+    "description": "Products in Health & Wellness category",
+    "created_date": "2025-11-02T15:33:01.201380"
+  }
+]
