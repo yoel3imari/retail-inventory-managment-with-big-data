@@ -14,6 +14,7 @@ from pyspark.sql import SparkSession
 from pyspark.sql.functions import *
 from pyspark.sql.types import *
 from pyspark.sql import DataFrame
+from clickhouse_writer import create_clickhouse_writer
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -29,6 +30,7 @@ class SalesStreamingProcessor:
             "bootstrap.servers": "kafka:9092",
             "group.id": "sales-streaming-group"
         }
+        self.clickhouse_writer = None
         
     def initialize_spark_session(self):
         """Initialize Spark session with necessary configurations"""
@@ -47,8 +49,13 @@ class SalesStreamingProcessor:
                 .getOrCreate()
             
             logger.info("Spark session initialized successfully")
-            return True
             
+            # Initialize ClickHouse writer
+            self.clickhouse_writer = create_clickhouse_writer(self.spark)
+            logger.info("ClickHouse writer initialized")
+            
+            return True
+             
         except Exception as e:
             logger.error(f"Failed to initialize Spark session: {e}")
             return False
@@ -157,30 +164,48 @@ class SalesStreamingProcessor:
         
         return anomaly_df
     
-    def write_to_clickhouse(self, df: DataFrame, table_name: str):
-        """Write streaming data to ClickHouse"""
-        query = df \
-            .writeStream \
-            .outputMode("update") \
-            .format("console") \
-            .option("truncate", "false") \
-            .option("checkpointLocation", f"/tmp/checkpoint/{table_name}") \
-            .start()
-        
-        # For production, uncomment the ClickHouse writer:
-        # query = df \
-        #     .writeStream \
-        #     .outputMode("update") \
-        #     .format("jdbc") \
-        #     .option("url", "jdbc:clickhouse://clickhouse:8123/default") \
-        #     .option("driver", "com.clickhouse.jdbc.ClickHouseDriver") \
-        #     .option("dbtable", table_name) \
-        #     .option("user", "default") \
-        #     .option("password", "clickhouse") \
-        #     .option("checkpointLocation", f"/tmp/checkpoint/{table_name}") \
-        #     .start()
-        
-        return query
+    def write_sales_metrics_to_clickhouse(self, df: DataFrame, batch_id: int):
+        """Write sales metrics to ClickHouse"""
+        if self.clickhouse_writer:
+            self.clickhouse_writer.write_sales_metrics(df, batch_id)
+    
+    def write_sales_alerts_to_clickhouse(self, df: DataFrame, batch_id: int):
+        """Write sales alerts to ClickHouse"""
+        if self.clickhouse_writer:
+            # Convert anomaly data to alert format
+            alerts_df = df.filter(col("is_anomaly") == True) \
+                .select(
+                    col("sale_id").alias("alert_id"),
+                    lit("SALES_SPIKE").alias("alert_type"),
+                    lit("HIGH").alias("alert_severity"),
+                    col("store_id"),
+                    col("product_id"),
+                    col("total_amount").alias("current_value"),
+                    col("moving_avg").alias("threshold_value"),
+                    concat(
+                        lit("Sales anomaly detected: $"),
+                        col("total_amount"),
+                        lit(" vs expected $"),
+                        col("moving_avg")
+                    ).alias("alert_message"),
+                    col("sale_timestamp").alias("alert_timestamp")
+                )
+            
+            self.clickhouse_writer.write_streaming_alerts(alerts_df, batch_id)
+    
+    def write_raw_sales_to_clickhouse(self, df: DataFrame, batch_id: int):
+        """Write raw sales events to ClickHouse for auditing"""
+        if self.clickhouse_writer:
+            raw_events_df = df.select(
+                col("sale_id").alias("event_id"),
+                col("sale_timestamp").alias("event_timestamp"),
+                col("kafka_timestamp"),
+                col("store_id"),
+                col("product_id"),
+                to_json(struct("*")).alias("payload")
+            )
+            
+            self.clickhouse_writer.write_raw_events(raw_events_df, "SALES", batch_id)
     
     def process_sales_stream(self):
         """Main method to process sales streaming data"""
@@ -188,6 +213,11 @@ class SalesStreamingProcessor:
             return
         
         try:
+            # Update job monitoring
+            self.clickhouse_writer.update_job_monitoring(
+                "sales_streaming", "RUNNING", 0, "", "/tmp/checkpoint/sales_streaming"
+            )
+            
             # Read from Kafka
             kafka_df = self.read_from_kafka("sales_events")
             
@@ -200,32 +230,49 @@ class SalesStreamingProcessor:
             # Detect anomalies
             anomaly_df = self.detect_anomalies(sales_df)
             
-            # Write to console for demonstration
-            console_query_metrics = metrics_df \
+            # Write to ClickHouse
+            clickhouse_query_metrics = metrics_df \
                 .writeStream \
                 .outputMode("update") \
-                .format("console") \
-                .option("truncate", "false") \
+                .foreachBatch(self.write_sales_metrics_to_clickhouse) \
+                .option("checkpointLocation", "/tmp/checkpoint/sales_metrics") \
                 .start()
             
-            console_query_anomalies = anomaly_df \
+            clickhouse_query_alerts = anomaly_df \
                 .writeStream \
                 .outputMode("update") \
-                .format("console") \
-                .option("truncate", "false") \
+                .foreachBatch(self.write_sales_alerts_to_clickhouse) \
+                .option("checkpointLocation", "/tmp/checkpoint/sales_alerts") \
                 .start()
             
-            logger.info("Sales streaming processing started")
+            # Also write raw events for auditing
+            raw_events_query = sales_df \
+                .writeStream \
+                .outputMode("append") \
+                .foreachBatch(self.write_raw_sales_to_clickhouse) \
+                .option("checkpointLocation", "/tmp/checkpoint/sales_raw") \
+                .start()
+            
+            logger.info("Sales streaming processing started with ClickHouse integration")
             
             # Wait for termination
-            console_query_metrics.awaitTermination()
-            console_query_anomalies.awaitTermination()
+            clickhouse_query_metrics.awaitTermination()
+            clickhouse_query_alerts.awaitTermination()
+            raw_events_query.awaitTermination()
             
         except Exception as e:
             logger.error(f"Error in sales streaming processing: {e}")
+            if self.clickhouse_writer:
+                self.clickhouse_writer.update_job_monitoring(
+                    "sales_streaming", "FAILED", 0, str(e), "/tmp/checkpoint/sales_streaming"
+                )
             raise
         finally:
             if self.spark:
+                if self.clickhouse_writer:
+                    self.clickhouse_writer.update_job_monitoring(
+                        "sales_streaming", "COMPLETED", 0, "", "/tmp/checkpoint/sales_streaming"
+                    )
                 self.spark.stop()
 
 def main():

@@ -22,4 +22,4 @@ COPY . .
 EXPOSE 8000
 
 # Default command
-CMD ["python", "scripts/create_sample_data.py", "&&", "python", "scripts/data_generator.py"]
+CMD ["sh", "-c", "python scripts/create_sample_data.py && python scripts/data_generator.py"]

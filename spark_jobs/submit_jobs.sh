@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Spark Job Submission Script
-# This script submits Spark jobs to the cluster
+# This script submits Spark jobs to the cluster, including the new Kafka-ClickHouse streaming bridge
 
 set -e
 
@@ -47,9 +47,9 @@ check_spark_master() {
     fi
 }
 
-# Submit sales streaming job
+# Submit sales streaming job (with ClickHouse integration)
 submit_sales_streaming() {
-    log "Submitting Sales Streaming job..."
+    log "Submitting Sales Streaming job (with ClickHouse integration)..."
     
     /opt/spark/bin/spark-submit \
         --master $SPARK_MASTER \
@@ -74,9 +74,9 @@ submit_sales_streaming() {
     fi
 }
 
-# Submit inventory streaming job
+# Submit inventory streaming job (with ClickHouse integration)
 submit_inventory_streaming() {
-    log "Submitting Inventory Streaming job..."
+    log "Submitting Inventory Streaming job (with ClickHouse integration)..."
     
     /opt/spark/bin/spark-submit \
         --master $SPARK_MASTER \
@@ -127,6 +127,33 @@ submit_ml_training() {
     fi
 }
 
+# Submit unified streaming bridge job (Kafka to ClickHouse)
+submit_unified_streaming_bridge() {
+    log "Submitting Unified Streaming Bridge job (Kafka to ClickHouse)..."
+    
+    /opt/spark/bin/spark-submit \
+        --master $SPARK_MASTER \
+        --deploy-mode client \
+        --name "UnifiedStreamingBridge" \
+        --packages "org.apache.spark:spark-sql-kafka-0-10_2.12:3.4.1,com.clickhouse:clickhouse-jdbc:0.4.6" \
+        --conf "spark.sql.adaptive.enabled=true" \
+        --conf "spark.sql.adaptive.coalescePartitions.enabled=true" \
+        --conf "spark.streaming.backpressure.enabled=true" \
+        --conf "spark.streaming.kafka.maxRatePerPartition=75" \
+        --conf "spark.driver.memory=2g" \
+        --conf "spark.executor.memory=2g" \
+        --conf "spark.driver.cores=2" \
+        --conf "spark.executor.cores=2" \
+        $JOBS_PATH/unified_streaming_bridge.py
+    
+    if [ $? -eq 0 ]; then
+        log_success "Unified Streaming Bridge job submitted successfully"
+    else
+        log_error "Failed to submit Unified Streaming Bridge job"
+        exit 1
+    fi
+}
+
 # Submit batch processing job
 submit_batch_processing() {
     log "Submitting Batch Processing job..."
@@ -155,6 +182,7 @@ create_checkpoint_dirs() {
     log "Creating checkpoint directories..."
     mkdir -p $CHECKPOINT_PATH/sales_streaming
     mkdir -p $CHECKPOINT_PATH/inventory_streaming
+    mkdir -p $CHECKPOINT_PATH/unified_bridge
     mkdir -p $CHECKPOINT_PATH/ml_training
     log_success "Checkpoint directories created"
 }
@@ -165,6 +193,10 @@ show_job_status() {
     
     # Get running applications
     curl -s http://spark-master:8080/api/v1/applications | jq -r '.[] | "\(.id)\t\(.name)\t\(.state)"' 2>/dev/null || echo "Unable to fetch job status"
+    
+    # Check ClickHouse for streaming metrics
+    log "Checking ClickHouse streaming metrics..."
+    curl -s "http://clickhouse:8123/?query=SELECT%20job_name,%20status,%20records_processed%20FROM%20retail.spark_job_monitoring%20WHERE%20last_updated%20%3E%3D%20now()%20-%20INTERVAL%201%20DAY%20ORDER%20BY%20last_updated%20DESC%20LIMIT%205" 2>/dev/null || echo "Unable to query ClickHouse metrics"
 }
 
 # Clean up checkpoint data
@@ -174,19 +206,37 @@ clean_checkpoints() {
     log_success "Checkpoint data cleaned"
 }
 
+# Test the Kafka-ClickHouse bridge pipeline
+test_bridge_pipeline() {
+    log "Testing Kafka-ClickHouse Bridge Pipeline..."
+    
+    # Run the test script from the data generator container
+    docker exec -it data-generator python /app/scripts/test_spark_clickhouse_bridge.py
+    
+    if [ $? -eq 0 ]; then
+        log_success "Bridge pipeline test completed successfully"
+    else
+        log_error "Bridge pipeline test failed"
+        exit 1
+    fi
+}
+
 # Show usage
 usage() {
-    echo "Usage: $0 {sales|inventory|ml|batch|all|status|clean|help}"
+    echo "Usage: $0 {sales|inventory|ml|batch|unified|bridge|all|status|clean|test-bridge|help}"
     echo ""
     echo "Commands:"
-    echo "  sales      - Submit sales streaming job"
-    echo "  inventory  - Submit inventory streaming job"
-    echo "  ml         - Submit ML training job"
-    echo "  batch      - Submit batch processing job"
-    echo "  all        - Submit all streaming jobs"
-    echo "  status     - Show job status"
-    echo "  clean      - Clean checkpoint data"
-    echo "  help       - Show this help message"
+    echo "  sales       - Submit sales streaming job (with ClickHouse)"
+    echo "  inventory   - Submit inventory streaming job (with ClickHouse)"
+    echo "  ml          - Submit ML training job"
+    echo "  batch       - Submit batch processing job"
+    echo "  unified     - Submit unified streaming bridge (both topics)"
+    echo "  bridge      - Alias for unified (recommended for production)"
+    echo "  all         - Submit all streaming jobs"
+    echo "  status      - Show job status and ClickHouse metrics"
+    echo "  clean       - Clean checkpoint data"
+    echo "  test-bridge - Test the Kafka-ClickHouse bridge pipeline"
+    echo "  help        - Show this help message"
     echo ""
 }
 
@@ -219,15 +269,27 @@ case "$1" in
         wait
         log_success "All streaming jobs submitted"
         ;;
+    
+    unified|bridge)
+        check_spark_master
+        create_checkpoint_dirs
+        submit_unified_streaming_bridge
+        ;;
     status)
         show_job_status
         ;;
     clean)
         clean_checkpoints
         ;;
+    
+    test-bridge)
+        test_bridge_pipeline
+        ;;
+    
     help|--help|-h)
         usage
         ;;
+    
     *)
         log_error "Invalid command: $1"
         usage

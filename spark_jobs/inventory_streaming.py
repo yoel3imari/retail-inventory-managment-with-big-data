@@ -16,6 +16,7 @@ from pyspark.sql.functions import *
 from pyspark.sql.types import *
 from pyspark.sql import DataFrame
 from pyspark.sql.window import Window
+from clickhouse_writer import create_clickhouse_writer
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -30,6 +31,7 @@ class InventoryStreamingProcessor:
             "bootstrap.servers": "kafka:9092",
             "group.id": "inventory-streaming-group"
         }
+        self.clickhouse_writer = None
         
     def initialize_spark_session(self):
         """Initialize Spark session with necessary configurations"""
@@ -46,8 +48,13 @@ class InventoryStreamingProcessor:
                 .getOrCreate()
             
             logger.info("Spark session initialized successfully")
-            return True
             
+            # Initialize ClickHouse writer
+            self.clickhouse_writer = create_clickhouse_writer(self.spark)
+            logger.info("ClickHouse writer initialized")
+            
+            return True
+             
         except Exception as e:
             logger.error(f"Failed to initialize Spark session: {e}")
             return False
@@ -201,17 +208,49 @@ class InventoryStreamingProcessor:
         
         return turnover_df
     
-    def write_to_console(self, df: DataFrame, output_name: str):
-        """Write streaming data to console for monitoring"""
-        query = df \
-            .writeStream \
-            .outputMode("update") \
-            .format("console") \
-            .option("truncate", "false") \
-            .option("checkpointLocation", f"/tmp/checkpoint/inventory_{output_name}") \
-            .start()
-        
-        return query
+    def write_inventory_metrics_to_clickhouse(self, df: DataFrame, batch_id: int):
+        """Write inventory metrics to ClickHouse"""
+        if self.clickhouse_writer:
+            self.clickhouse_writer.write_inventory_metrics(df, batch_id)
+    
+    def write_inventory_alerts_to_clickhouse(self, df: DataFrame, batch_id: int):
+        """Write inventory alerts to ClickHouse"""
+        if self.clickhouse_writer:
+            # Convert alert data to ClickHouse format
+            alerts_df = df.select(
+                col("inventory_id").alias("alert_id"),
+                col("alert_type"),
+                col("alert_severity"),
+                col("store_id"),
+                col("product_id"),
+                col("current_stock").alias("current_value"),
+                col("reorder_point").alias("threshold_value"),
+                concat(
+                    lit("Inventory alert: "),
+                    col("alert_type"),
+                    lit(" - Current stock: "),
+                    col("current_stock"),
+                    lit(", Reorder point: "),
+                    col("reorder_point")
+                ).alias("alert_message"),
+                col("update_timestamp").alias("alert_timestamp")
+            )
+            
+            self.clickhouse_writer.write_streaming_alerts(alerts_df, batch_id)
+    
+    def write_raw_inventory_to_clickhouse(self, df: DataFrame, batch_id: int):
+        """Write raw inventory events to ClickHouse for auditing"""
+        if self.clickhouse_writer:
+            raw_events_df = df.select(
+                col("inventory_id").alias("event_id"),
+                col("update_timestamp").alias("event_timestamp"),
+                col("kafka_timestamp"),
+                col("store_id"),
+                col("product_id"),
+                to_json(struct("*")).alias("payload")
+            )
+            
+            self.clickhouse_writer.write_raw_events(raw_events_df, "INVENTORY", batch_id)
     
     def process_inventory_stream(self):
         """Main method to process inventory streaming data"""
@@ -219,6 +258,11 @@ class InventoryStreamingProcessor:
             return
         
         try:
+            # Update job monitoring
+            self.clickhouse_writer.update_job_monitoring(
+                "inventory_streaming", "RUNNING", 0, "", "/tmp/checkpoint/inventory_streaming"
+            )
+            
             # Read from Kafka
             kafka_df = self.read_from_kafka("inventory_events")
             
@@ -234,23 +278,49 @@ class InventoryStreamingProcessor:
             # Calculate turnover metrics
             turnover_df = self.calculate_turnover_metrics(inventory_df)
             
-            # Write to console for demonstration
-            console_query_metrics = self.write_to_console(metrics_df, "metrics")
-            console_query_alerts = self.write_to_console(alert_df, "alerts")
-            console_query_turnover = self.write_to_console(turnover_df, "turnover")
+            # Write to ClickHouse
+            clickhouse_query_metrics = metrics_df \
+                .writeStream \
+                .outputMode("update") \
+                .foreachBatch(self.write_inventory_metrics_to_clickhouse) \
+                .option("checkpointLocation", "/tmp/checkpoint/inventory_metrics") \
+                .start()
             
-            logger.info("Inventory streaming processing started")
+            clickhouse_query_alerts = alert_df \
+                .writeStream \
+                .outputMode("update") \
+                .foreachBatch(self.write_inventory_alerts_to_clickhouse) \
+                .option("checkpointLocation", "/tmp/checkpoint/inventory_alerts") \
+                .start()
+            
+            # Also write raw events for auditing
+            raw_events_query = inventory_df \
+                .writeStream \
+                .outputMode("append") \
+                .foreachBatch(self.write_raw_inventory_to_clickhouse) \
+                .option("checkpointLocation", "/tmp/checkpoint/inventory_raw") \
+                .start()
+            
+            logger.info("Inventory streaming processing started with ClickHouse integration")
             
             # Wait for termination
-            console_query_metrics.awaitTermination()
-            console_query_alerts.awaitTermination()
-            console_query_turnover.awaitTermination()
+            clickhouse_query_metrics.awaitTermination()
+            clickhouse_query_alerts.awaitTermination()
+            raw_events_query.awaitTermination()
             
         except Exception as e:
             logger.error(f"Error in inventory streaming processing: {e}")
+            if self.clickhouse_writer:
+                self.clickhouse_writer.update_job_monitoring(
+                    "inventory_streaming", "FAILED", 0, str(e), "/tmp/checkpoint/inventory_streaming"
+                )
             raise
         finally:
             if self.spark:
+                if self.clickhouse_writer:
+                    self.clickhouse_writer.update_job_monitoring(
+                        "inventory_streaming", "COMPLETED", 0, "", "/tmp/checkpoint/inventory_streaming"
+                    )
                 self.spark.stop()
 
 def main():
