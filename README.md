@@ -44,73 +44,105 @@ This project simulates a retail chain's data infrastructure, processing real-tim
 - At least 8GB RAM available
 - 10GB free disk space
 
-### Setup
+### One-Click Setup
 
-1. **Create project structure**:
+1. **Clone and setup**:
+```bash
+git clone <repository-url>
+cd retail-inventory-managment-with-big-data
+```
 
-2. **Save the Docker Compose file** as `docker-compose.yml`
+2. **Start all services and initialize**:
+```bash
+# Start services and run automated bootstrap
+./scripts/bootstrap.sh
+```
 
-3. **Save the ClickHouse schema** as `clickhouse/init/01-schema.sql`
+3. **Verify services are running**:
+```bash
+docker-compose ps
+```
 
-4. **Save the data generator script** as `scripts/generate_data.py`
+### Manual Setup (Alternative)
 
-5. **Start all services**:
+1. **Start services**:
 ```bash
 docker-compose up -d
 ```
 
-6. **Wait for services to be ready** (30-60 seconds):
+2. **Wait for services to be ready** (30-60 seconds):
 ```bash
 docker-compose ps
+```
+
+3. **Initialize data and infrastructure**:
+```bash
+# Create sample dimension data
+docker exec data-generator python scripts/create_sample_data.py
+
+# Start data generation
+docker exec data-generator python scripts/data_generator.py --duration 60 --rate 10
+```
+
+4. **Submit Spark streaming jobs**:
+```bash
+# Submit unified streaming bridge (recommended)
+docker exec spark-master ./submit_jobs.sh unified
+
+# Or submit individual jobs
+docker exec spark-master ./submit_jobs.sh sales
+docker exec spark-master ./submit_jobs.sh inventory
 ```
 
 ## 📊 Using the System
 
 ### 1. Access Web Interfaces
 
-- **MinIO Console**: http://localhost:9001 (minioadmin/minioadmin)
-- **Kafka UI**: http://localhost:8080
-- **Jupyter Notebook**: http://localhost:8888 (token: retail123)
-- **ClickHouse HTTP**: http://localhost:8123
+| Service | URL | Port | Credentials | Purpose |
+|---------|-----|------|-------------|---------|
+| **MinIO Console** | http://localhost:9001 | 9001 | minioadmin/minioadmin | Object storage management |
+| **Kafka UI** | http://localhost:8080 | 8080 | None | Monitor Kafka topics and messages |
+| **Spark Master UI** | http://localhost:8082 | 8082 | None | Monitor Spark applications |
+| **ClickHouse HTTP** | http://localhost:8123 | 8123 | default/clickhouse | Database HTTP interface |
+| **Airflow** | http://localhost:8081 | 8081 | airflow/airflow | Workflow orchestration |
 
-### 2. Create Kafka Topics
+### 2. Verify Kafka Topics (Automatically Created)
 
+The bootstrap script automatically creates the following Kafka topics:
+
+- `retail-sales-transactions` - Sales events and transactions
+- `retail-inventory-updates` - Inventory level changes
+- `retail-restock-alerts` - Low stock and restock notifications
+- `retail-price-changes` - Pricing updates
+- `retail-customer-events` - Customer behavior events
+
+**Check existing topics**:
 ```bash
-docker exec -it kafka kafka-topics --create \
-  --topic retail-sales \
-  --bootstrap-server localhost:9092 \
-  --partitions 3 --replication-factor 1
-
-docker exec -it kafka kafka-topics --create \
-  --topic retail-inventory-updates \
-  --bootstrap-server localhost:9092 \
-  --partitions 3 --replication-factor 1
-
-docker exec -it kafka kafka-topics --create \
-  --topic retail-stock-movements \
-  --bootstrap-server localhost:9092 \
-  --partitions 3 --replication-factor 1
+docker exec kafka kafka-topics --list --bootstrap-server localhost:9092
 ```
 
 ### 3. Generate Sample Data
 
 ```bash
-# Enter the data generator container
-docker exec -it data-generator bash
+# Generate dimension data (stores, products, categories)
+docker exec data-generator python scripts/create_sample_data.py
 
-# Run the generator
-cd /app
-python generate_data.py
+# Start real-time data generation
+docker exec data-generator python scripts/data_generator.py --duration 60 --rate 10
 ```
 
-Select option `4` to generate all types of events.
+**Data Generation Options**:
+- `--duration 60`: Run for 60 minutes
+- `--rate 10`: Generate 10 events per minute
+- `--stores 10`: Override number of stores
+- `--products 100`: Override number of products
 
 ### 4. Consume Kafka Messages
 
 ```bash
 # Watch sales transactions
 docker exec -it kafka kafka-console-consumer \
-  --topic retail-sales \
+  --topic retail-sales-transactions \
   --bootstrap-server localhost:9092 \
   --from-beginning --max-messages 5
 
@@ -133,26 +165,33 @@ USE retail;
 -- Check tables
 SHOW TABLES;
 
--- View low stock alerts
-SELECT * FROM low_stock_alerts LIMIT 10;
+-- View real-time sales metrics
+SELECT * FROM spark_sales_metrics LIMIT 10;
 
--- Top selling products
-SELECT 
-    product_name,
-    total_units_sold,
-    total_revenue,
-    profit_margin_pct
-FROM product_performance
+-- View inventory metrics and alerts
+SELECT * FROM spark_inventory_metrics WHERE stock_status != 'IN_STOCK' LIMIT 10;
+
+-- Top selling products (from fact tables)
+SELECT
+    p.product_name,
+    COUNT(s.sale_id) as transaction_count,
+    SUM(s.total_amount) as total_revenue
+FROM fact_sales s
+JOIN dim_product p ON s.product_key = p.product_key
+WHERE s.transaction_time >= today()
+GROUP BY p.product_name
+ORDER BY total_revenue DESC
 LIMIT 10;
 
--- Sales by hour
-SELECT 
-    toHour(date_hour) as hour,
-    sum(total_revenue) as revenue
-FROM hourly_sales_metrics
-WHERE date_hour >= today()
-GROUP BY hour
-ORDER BY hour;
+-- Sales by hour (from streaming metrics)
+SELECT
+    window_start,
+    store_id,
+    total_revenue,
+    transaction_count
+FROM spark_sales_metrics
+ORDER BY window_start DESC
+LIMIT 10;
 ```
 
 ## 📚 Learning Exercises
@@ -174,46 +213,51 @@ Detect unusual sales patterns or inventory discrepancies.
 
 ## 🔍 Sample Queries
 
-### Inventory Turnover Rate
+### Real-time Sales Analytics
 ```sql
-SELECT 
-    p.category,
-    COUNT(DISTINCT p.product_id) as products,
-    SUM(s.quantity_sold) as units_sold,
-    AVG(i.quantity_on_hand) as avg_inventory,
-    (SUM(s.quantity_sold) / AVG(i.quantity_on_hand)) * 30 as turnover_days
-FROM retail.products p
-JOIN retail.sales s ON p.product_id = s.product_id
-JOIN retail.inventory i ON p.product_id = i.product_id
-WHERE s.transaction_time >= now() - INTERVAL 30 DAY
-GROUP BY p.category;
-```
-
-### Store Performance Comparison
-```sql
-SELECT 
+-- Current hour sales performance
+SELECT
     store_id,
-    COUNT(DISTINCT transaction_id) as transactions,
-    SUM(total_amount) as revenue,
-    AVG(total_amount) as avg_transaction,
-    SUM(quantity_sold) as units_sold
-FROM retail.sales
-WHERE transaction_time >= today() - INTERVAL 7 DAY
+    SUM(total_revenue) as hourly_revenue,
+    SUM(transaction_count) as hourly_transactions,
+    AVG(avg_unit_price) as avg_price
+FROM spark_sales_metrics
+WHERE window_start >= now() - INTERVAL 1 HOUR
 GROUP BY store_id
-ORDER BY revenue DESC;
+ORDER BY hourly_revenue DESC;
 ```
 
-### Stock Movement Analysis
+### Inventory Status Dashboard
 ```sql
-SELECT 
-    movement_type,
-    COUNT(*) as movement_count,
-    SUM(quantity) as total_quantity,
-    AVG(quantity) as avg_quantity
-FROM retail.stock_movements
-WHERE movement_time >= now() - INTERVAL 7 DAY
-GROUP BY movement_type
-ORDER BY movement_count DESC;
+-- Current inventory status across stores
+SELECT
+    store_id,
+    COUNT(*) as products,
+    SUM(CASE WHEN stock_status = 'OUT_OF_STOCK' THEN 1 ELSE 0 END) as out_of_stock,
+    SUM(CASE WHEN stock_status = 'LOW_STOCK' THEN 1 ELSE 0 END) as low_stock,
+    AVG(stock_percentage) as avg_stock_level
+FROM spark_inventory_metrics
+WHERE window_start >= now() - INTERVAL 1 HOUR
+GROUP BY store_id
+ORDER BY out_of_stock DESC;
+```
+
+### Product Performance Analysis
+```sql
+-- Top performing products with inventory status
+SELECT
+    p.product_name,
+    p.category,
+    sm.total_revenue,
+    sm.transaction_count,
+    im.latest_stock,
+    im.stock_status
+FROM spark_sales_metrics sm
+JOIN spark_inventory_metrics im ON sm.store_id = im.store_id AND sm.product_id = im.product_id
+JOIN dim_product p ON sm.product_id = p.sku
+WHERE sm.window_start >= now() - INTERVAL 1 DAY
+ORDER BY sm.total_revenue DESC
+LIMIT 20;
 ```
 
 ## 🛠️ Advanced Features
@@ -236,22 +280,28 @@ client.make_bucket("retail-data")
 client.fput_object("retail-data", "sales.csv", "/path/to/sales.csv")
 ```
 
-### Stream Data from Kafka to ClickHouse
-Use Kafka Engine in ClickHouse for direct consumption:
+### Unified Streaming Bridge
+The project includes a unified Spark streaming bridge that processes both sales and inventory events:
 
-```sql
-CREATE TABLE retail.sales_queue
-(
-    transaction_id String,
-    product_id String,
-    -- other fields...
-)
-ENGINE = Kafka
-SETTINGS
-    kafka_broker_list = 'kafka:19092',
-    kafka_topic_list = 'retail-sales',
-    kafka_group_name = 'clickhouse_consumer',
-    kafka_format = 'JSONEachRow';
+```bash
+# Submit the unified streaming bridge
+docker exec spark-master ./submit_jobs.sh unified
+
+# This processes:
+# - retail-sales-transactions → spark_sales_metrics
+# - retail-inventory-updates → spark_inventory_metrics
+# - Generates unified alerts → streaming_alerts
+```
+
+### Pipeline Testing
+Test the complete data pipeline:
+
+```bash
+# Run comprehensive pipeline test
+python scripts/test_spark_clickhouse_bridge.py
+
+# Check ClickHouse table data
+python scripts/check_clickhouse_tables.py
 ```
 
 ## 📦 Data Volumes

@@ -264,7 +264,7 @@ class InventoryStreamingProcessor:
             )
             
             # Read from Kafka
-            kafka_df = self.read_from_kafka("inventory_events")
+            kafka_df = self.read_from_kafka("retail-inventory-updates")
             
             # Parse and process data
             inventory_df = self.parse_inventory_data(kafka_df)

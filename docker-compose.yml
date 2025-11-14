@@ -168,9 +168,16 @@ services:
   spark-master:
     image: apache/spark:3.4.1
     container_name: spark-master
+    depends_on:
+      data-generator:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
     command: >
       bash -c "
         /opt/spark/sbin/start-master.sh &&
+        sleep 10 &&
+        /opt/spark/jobs/auto-submit.sh &
         tail -f /opt/spark/logs/spark--org.apache.spark.deploy.master.Master-1-*.out
       "
     ports:
@@ -179,6 +186,7 @@ services:
     volumes:
       - ./spark_jobs:/opt/spark/jobs
       - ./config:/opt/spark/conf
+      - ./docker/spark-job-submitter/auto-submit.sh:/opt/spark/jobs/auto-submit.sh
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/"]
       interval: 30s
@@ -223,24 +231,24 @@ services:
     depends_on:
       kafka:
         condition: service_healthy
-      clickhouse:
-        condition: service_healthy
     environment:
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
       - CLICKHOUSE_HOST=clickhouse
       - CLICKHOUSE_PORT=8123
       - PYTHONPATH=/app
+      - DEBUG=true
     volumes:
       - ./scripts:/app/scripts
       - ./src:/app/src
     healthcheck:
-      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+      test: ["CMD", "python", "-c", "import sys; import os; sys.exit(0 if os.path.exists('/app/data/stores.json') and os.path.exists('/app/data/products.json') else 1)"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 30s
+      start_period: 60s
     networks:
       - dev-network
+
 
 volumes:
   minio_data:

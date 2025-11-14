@@ -219,7 +219,7 @@ class SalesStreamingProcessor:
             )
             
             # Read from Kafka
-            kafka_df = self.read_from_kafka("sales_events")
+            kafka_df = self.read_from_kafka("retail-sales-transactions")
             
             # Parse and process data
             sales_df = self.parse_sales_data(kafka_df)

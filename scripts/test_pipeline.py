@@ -26,12 +26,12 @@ class PipelineTester:
         logger.info("Testing service connectivity...")
         
         services = {
-            'kafka': 'http://kafka:9092',
-            'clickhouse': 'http://clickhouse:8123/ping',
-            'spark_master': 'http://spark-master:8080/',
-            'airflow': 'http://airflow-webserver:8080/health',
-            'minio': 'http://minio:9000/minio/health/live',
-            'kafka_ui': 'http://kafka-ui:8080/api/clusters/local'
+            'kafka': 'http://localhost:9092',
+            'clickhouse': 'http://localhost:8123/ping',
+            'spark_master': 'http://localhost:8082/',
+            'airflow': 'http://localhost:8081/health',
+            'minio': 'http://localhost:9000/minio/health/live',
+            'kafka_ui': 'http://localhost:8080/api/clusters/local'
         }
         
         results = {}
@@ -62,24 +62,39 @@ class PipelineTester:
         logger.info("Testing Kafka topics...")
         
         try:
-            response = requests.get('http://kafka-ui:8080/api/clusters/local/topics')
-            topics = response.json()
+            url = 'http://localhost:8080/api/clusters/local/topics'
+            logger.info(f"  Calling Kafka UI API: {url}")
+            response = requests.get(url)
+            logger.info(f"  Kafka UI response status: {response.status_code}")
+            logger.info(f"  Kafka UI response headers: {response.headers}")
             
-            required_topics = ['sales_events', 'inventory_events']
-            found_topics = [topic for topic in required_topics if topic in topics]
+            # Parse the response
+            data = response.json()
+            logger.info(f"  Kafka UI response data keys: {list(data.keys())}")
+            
+            # Extract topic names from the response structure
+            topics_data = data.get('topics', [])
+            topic_names = [topic.get('name') for topic in topics_data if topic.get('name')]
+            logger.info(f"  Available topics: {topic_names}")
+            
+            required_topics = ['retail-sales-transactions', 'retail-inventory-updates']
+            found_topics = [topic for topic in required_topics if topic in topic_names]
             
             results = {
                 'required_topics': required_topics,
                 'found_topics': found_topics,
+                'available_topics': topic_names,
                 'status': 'PASS' if len(found_topics) == len(required_topics) else 'FAIL'
             }
             
+            logger.info(f"  Required topics: {required_topics}")
             logger.info(f"  Found topics: {found_topics}")
             self.test_results['kafka_topics'] = results
             return results['status'] == 'PASS'
             
         except Exception as e:
             logger.error(f"Kafka topics test failed: {e}")
+            logger.error(f"  Response text: {response.text[:500] if 'response' in locals() else 'No response'}")
             self.test_results['kafka_topics'] = {'status': f'FAIL - {str(e)}'}
             return False
     
@@ -91,7 +106,7 @@ class PipelineTester:
             # Test basic query
             query = "SHOW DATABASES"
             response = requests.post(
-                'http://clickhouse:8123/',
+                'http://localhost:8123/',
                 data=query,
                 auth=('default', 'clickhouse')
             )
@@ -101,24 +116,35 @@ class PipelineTester:
                 self.test_results['clickhouse_data'] = {'status': 'FAIL - Database not found'}
                 return False
             
-            # Test table counts
+            # Test table counts - first let's check what columns are available
+            logger.info("  Checking available columns in system.tables...")
+            column_query = "DESCRIBE system.tables"
+            column_response = requests.post(
+                'http://localhost:8123/',
+                data=column_query,
+                auth=('default', 'clickhouse')
+            )
+            logger.info(f"  System.tables columns: {column_response.text}")
+            
+            # Test table counts with correct column names
             query = """
-            SELECT 
+            SELECT
                 count() as table_count,
-                sum(rows) as total_rows
-            FROM system.tables 
+                sum(total_rows) as total_rows
+            FROM system.tables
             WHERE database = 'retail'
             """
             
             response = requests.post(
-                'http://clickhouse:8123/',
+                'http://localhost:8123/',
                 data=query,
                 auth=('default', 'clickhouse')
             )
             
+            logger.info(f"  ClickHouse response text: {response.text}")
             result = response.text.strip().split('\t')
             table_count = int(result[0])
-            total_rows = int(result[1])
+            total_rows = int(result[1]) if result[1] != '\\N' else 0
             
             results = {
                 'table_count': table_count,
@@ -151,7 +177,7 @@ class PipelineTester:
             """
             
             response = requests.post(
-                'http://clickhouse:8123/',
+                'http://localhost:8123/',
                 data=query,
                 auth=('default', 'clickhouse')
             )
@@ -182,11 +208,31 @@ class PipelineTester:
         logger.info("Testing Spark applications...")
         
         try:
-            response = requests.get('http://spark-master:8080/api/v1/applications')
-            applications = response.json()
+            url = 'http://localhost:8082/api/v1/applications'
+            logger.info(f"  Calling Spark API: {url}")
+            response = requests.get(url)
+            logger.info(f"  Spark API response status: {response.status_code}")
+            logger.info(f"  Spark API response headers: {response.headers}")
+            logger.info(f"  Spark API response text (first 500 chars): {response.text[:500]}")
             
-            running_apps = [app for app in applications if app['state'] == 'RUNNING']
-            app_names = [app['name'] for app in running_apps]
+            # Try to parse as JSON, but handle different response formats
+            if response.status_code == 200:
+                try:
+                    applications = response.json()
+                except json.JSONDecodeError:
+                    logger.warning("  Spark API returned non-JSON response, checking for HTML")
+                    if '<html' in response.text.lower():
+                        logger.warning("  Spark API returned HTML instead of JSON")
+                        applications = []
+                    else:
+                        logger.warning("  Spark API returned unexpected format")
+                        applications = []
+            else:
+                logger.warning(f"  Spark API returned status {response.status_code}")
+                applications = []
+            
+            running_apps = [app for app in applications if app.get('state') == 'RUNNING']
+            app_names = [app.get('name', 'unknown') for app in running_apps]
             
             results = {
                 'total_applications': len(applications),
@@ -211,7 +257,7 @@ class PipelineTester:
         try:
             # This would typically use Airflow API
             # For now, we'll check if the service is responsive
-            response = requests.get('http://airflow-webserver:8080/health')
+            response = requests.get('http://localhost:8081/health')
             
             results = {
                 'status': 'PASS' if response.status_code == 200 else 'FAIL',
@@ -242,7 +288,7 @@ class PipelineTester:
             """
             
             response = requests.post(
-                'http://clickhouse:8123/',
+                'http://localhost:8123/',
                 data=query,
                 auth=('default', 'clickhouse')
             )

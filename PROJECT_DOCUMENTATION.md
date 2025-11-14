@@ -37,29 +37,39 @@ Data Generator  Real-time   ML Training  Airflow DAGs
 ## Data Flow
 
 ### 1. Data Generation
-- **Source**: Fake data generator simulating retail operations
+- **Source**: [`scripts/data_generator.py`](scripts/data_generator.py) - Realistic retail data simulator
 - **Output**: JSON events published to Kafka topics
-- **Topics**: `sales_events`, `inventory_events`
+- **Topics**: `retail-sales-transactions`, `retail-inventory-updates`, `retail-restock-alerts`
+- **Features**: Peak hour patterns, weekend multipliers, seasonal variations
 
 ### 2. Real-time Processing
-- **Technology**: Spark Structured Streaming
-- **Processing**: Windowed aggregations, anomaly detection
-- **Output**: Real-time metrics and alerts
+- **Technology**: Spark Structured Streaming with unified bridge
+- **Applications**:
+  - [`spark_jobs/unified_streaming_bridge.py`](spark_jobs/unified_streaming_bridge.py) - Multi-topic processing
+  - [`spark_jobs/sales_streaming.py`](spark_jobs/sales_streaming.py) - Sales-specific processing
+  - [`spark_jobs/inventory_streaming.py`](spark_jobs/inventory_streaming.py) - Inventory monitoring
+- **Processing**: 5-minute windows, real-time metrics, anomaly detection
+- **Output**: ClickHouse tables with real-time metrics and alerts
 
-### 3. Batch Processing
-- **Technology**: Spark Batch Jobs
-- **Processing**: Daily aggregations, ML training
-- **Output**: Business reports, trained models
+### 3. Batch Processing & ML
+- **Technology**: Spark Batch Jobs with MLlib
+- **Applications**:
+  - [`spark_jobs/ml_training.py`](spark_jobs/ml_training.py) - Demand forecasting models
+  - [`spark_jobs/batch_processing.py`](spark_jobs/batch_processing.py) - Daily aggregations
+- **Processing**: Feature engineering, model training, business reports
+- **Output**: Trained models, performance metrics, business insights
 
-### 4. Data Storage
-- **Technology**: ClickHouse
-- **Schema**: Star schema with facts and dimensions
-- **Features**: Columnar storage, real-time inserts
+### 4. Data Storage & Analytics
+- **Technology**: ClickHouse OLAP database
+- **Schema**: Enhanced star schema with real-time views
+- **Tables**: `fact_sales`, `fact_inventory`, `spark_sales_metrics`, `spark_inventory_metrics`
+- **Features**: Columnar storage, real-time inserts, materialized views
 
-### 5. Visualization
-- **Technology**: Power BI
-- **Data Source**: ClickHouse via JDBC
-- **Features**: Interactive dashboards, real-time updates
+### 5. Visualization & Monitoring
+- **Technology**: Power BI with ClickHouse integration
+- **Data Source**: ClickHouse via ODBC/JDBC
+- **Features**: Interactive dashboards, real-time updates, automated alerts
+- **Monitoring**: [`docs/clickhouse_table_verification.md`](docs/clickhouse_table_verification.md) - Data quality checks
 
 ## Implementation Details
 
@@ -92,54 +102,68 @@ Data Generator  Real-time   ML Training  Airflow DAGs
 ### Spark Applications (`spark_jobs/`)
 
 #### Streaming Applications
-1. **Sales Streaming** (`sales_streaming.py`)
-   - Real-time sales metrics
-   - Anomaly detection
-   - Windowed aggregations
+1. **Unified Streaming Bridge** ([`unified_streaming_bridge.py`](spark_jobs/unified_streaming_bridge.py))
+   - Multi-topic Kafka consumption (sales + inventory)
+   - Real-time metrics aggregation
+   - Unified alert detection
+   - ClickHouse integration for both raw and processed data
 
-2. **Inventory Streaming** (`inventory_streaming.py`)
-   - Stock level monitoring
-   - Alert generation
-   - Turnover calculations
+2. **Sales Streaming** ([`sales_streaming.py`](spark_jobs/sales_streaming.py))
+   - Real-time sales metrics with ClickHouse output
+   - Anomaly detection for high-value transactions
+   - 5-minute windowed aggregations with 1-minute slides
+
+3. **Inventory Streaming** ([`inventory_streaming.py`](spark_jobs/inventory_streaming.py))
+   - Stock level monitoring with real-time alerts
+   - Turnover calculations and stock status classification
+   - 10-minute windows with 2-minute slides
 
 #### Batch Applications
-3. **ML Training** (`ml_training.py`)
-   - Demand forecasting (Random Forest)
-   - Stock optimization (GBT)
-   - Model evaluation and saving
+4. **ML Training** ([`ml_training.py`](spark_jobs/ml_training.py))
+   - Demand forecasting (Random Forest + Gradient Boosted Trees)
+   - Stock optimization models
+   - Model evaluation with RMSE metrics
+   - Model saving to MinIO storage
 
-4. **Batch Processing** (`batch_processing.py`)
-   - Daily KPI calculations
-   - Business reports
-   - Performance rankings
+5. **Batch Processing** ([`batch_processing.py`](spark_jobs/batch_processing.py))
+   - Daily KPI calculations and business reports
+   - Performance rankings and trend analysis
+   - ClickHouse materialized view updates
 
 #### Job Management
-- `submit_jobs.sh`: Automated job submission
-- Configuration management
-- Checkpoint handling
+- [`submit_jobs.sh`](spark_jobs/submit_jobs.sh): Automated job submission with unified bridge support
+- Configuration management via [`config/settings.py`](config/settings.py)
+- Checkpoint handling with automatic directory creation
+- Job monitoring and status tracking
 
 ### Database Schema (`clickhouse/init/`)
 
 #### Core Tables
 - **Fact Tables**: `fact_sales`, `fact_inventory`, `fact_ml_predictions`
-- **Dimension Tables**: `dim_date`, `dim_product`, `dim_store`
+- **Dimension Tables**: `dim_date`, `dim_product`, `dim_store`, `dim_category`, `dim_brand`
 - **Raw Events**: `raw_sales_events`, `raw_inventory_events`
 
-#### Enhanced Tables
-- **Real-time Metrics**: `realtime_sales_metrics`
-- **Alerts**: `realtime_inventory_alerts`
-- **ML Results**: `ml_model_results`
-- **Batch Results**: `batch_processing_results`
+#### Spark Streaming Tables
+- **Real-time Metrics**: `spark_sales_metrics`, `spark_inventory_metrics`
+- **Streaming Alerts**: `streaming_alerts`
+- **Raw Events**: `streaming_events_raw`
+- **Job Monitoring**: `spark_job_monitoring`
 
-#### Analytical Views
-- Real-time dashboard
-- Active alerts
-- ML model performance
-- Inventory turnover analysis
-- Customer behavior analysis
-- Seasonal patterns
-- Store comparison
-- Category performance
+#### Enhanced Views
+- **Real-time Dashboard**: Aggregated metrics for Power BI
+- **Active Alerts**: Current stock and sales anomalies
+- **ML Model Performance**: Prediction accuracy and feature importance
+- **Inventory Turnover Analysis**: Stock movement patterns
+- **Customer Behavior Analysis**: Purchase patterns and trends
+- **Seasonal Patterns**: Time-based sales trends
+- **Store Comparison**: Performance metrics across locations
+- **Category Performance**: Product category analytics
+
+#### Schema Management
+- **Initialization**: [`clickhouse/init/01-schema.sql`](clickhouse/init/01-schema.sql) - Core schema
+- **Enhanced Schema**: [`clickhouse/init/02-enhanced-schema.sql`](clickhouse/init/02-enhanced-schema.sql) - Streaming tables
+- **Bridge Schema**: [`clickhouse/init/03-spark-streaming-bridge.sql`](clickhouse/init/03-spark-streaming-bridge.sql) - Spark integration
+- **Verification**: [`docs/clickhouse_table_verification.md`](docs/clickhouse_table_verification.md) - Data quality checks
 
 ### Workflow Orchestration (`dags/`)
 
@@ -291,22 +315,28 @@ Data Generator  Real-time   ML Training  Airflow DAGs
 ## Testing and Validation
 
 ### Data Validation
-- Schema validation for incoming data
-- Business rule enforcement
-- Data quality monitoring
-- Anomaly detection
+- **Schema Validation**: JSON schema validation for incoming Kafka events
+- **Business Rules**: Enforced through [`config/settings.py`](config/settings.py) configuration
+- **Data Quality**: Automated monitoring via [`docs/clickhouse_table_verification.md`](docs/clickhouse_table_verification.md)
+- **Anomaly Detection**: Real-time detection in streaming applications
 
 ### Pipeline Testing
-- Unit tests for individual components
-- Integration tests for data flow
-- Performance testing under load
-- Failure scenario testing
+- **End-to-End Testing**: [`scripts/test_spark_clickhouse_bridge.py`](scripts/test_spark_clickhouse_bridge.py) - Complete pipeline validation
+- **Integration Tests**: Service connectivity and data flow verification
+- **Performance Testing**: Load testing with realistic data volumes
+- **Failure Scenarios**: Graceful error handling and recovery
 
 ### Model Validation
-- Cross-validation for ML models
-- A/B testing for business impact
-- Model drift detection
-- Feature importance analysis
+- **Cross-Validation**: Implemented in [`spark_jobs/ml_training.py`](spark_jobs/ml_training.py)
+- **Business Impact**: A/B testing framework for model comparison
+- **Model Drift**: Continuous monitoring of prediction accuracy
+- **Feature Importance**: Analysis and reporting in ML training jobs
+
+### Automated Testing Framework
+- **Pipeline Test**: Comprehensive test suite for Kafka-Spark-ClickHouse integration
+- **Data Quality Checks**: Automated validation of ClickHouse table data
+- **Service Health**: Continuous monitoring of all infrastructure components
+- **Alert Verification**: Testing of real-time alert generation and delivery
 
 ## Deployment Considerations
 
@@ -328,10 +358,99 @@ Data Generator  Real-time   ML Training  Airflow DAGs
 - Monitoring and adjustment
 
 ## Web Interfaces (Accessible Now)
-- **Kafka UI**: http://localhost:8080 - Monitor Kafka topics and messages
-- **MinIO Console**: http://localhost:9001 - Object storage management (minioadmin/minioadmin)
-- **Spark Master UI**: http://localhost:8082 - Monitor Spark applications
-- **ClickHouse HTTP**: http://localhost:8123 - Database interface
+
+| Service | URL | Port | Credentials | Purpose |
+|---------|-----|------|-------------|---------|
+| **Kafka UI** | http://localhost:8080 | 8080 | None | Monitor Kafka topics and messages |
+| **MinIO Console** | http://localhost:9001 | 9001 | minioadmin/minioadmin | Object storage management |
+| **Spark Master UI** | http://localhost:8082 | 8082 | None | Monitor Spark applications |
+| **ClickHouse HTTP** | http://localhost:8123 | 8123 | default/clickhouse | Database HTTP interface |
+| **Airflow** | http://localhost:8081 | 8081 | airflow/airflow | Workflow orchestration |
+
+## Current Implementation Status
+
+### Active Services
+- **Kafka**: KRaft mode (no Zookeeper), topics: `retail-sales-transactions`, `retail-inventory-updates`
+- **MinIO**: S3-compatible storage with buckets: `retail-raw-data`, `retail-processed-data`
+- **ClickHouse**: OLAP database with retail schema and real-time tables
+- **Spark**: Master-worker cluster with streaming and batch processing
+- **Airflow**: LocalExecutor with PostgreSQL backend
+- **Data Generator**: Automated fake data generation with realistic patterns
+
+### Data Flow Architecture
+```
+Data Generator → Kafka Topics → Spark Streaming → ClickHouse Tables → Power BI
+     ↓              ↓               ↓                ↓
+  Sales Events  Inventory     Unified Bridge     Real-time
+  (JSON)        Updates       Processing         Dashboards
+```
+
+### Key Features Implemented
+1. **Unified Streaming Bridge**: [`spark_jobs/unified_streaming_bridge.py`](spark_jobs/unified_streaming_bridge.py) - Processes both sales and inventory streams
+2. **Automated Bootstrap**: [`scripts/bootstrap.sh`](scripts/bootstrap.sh) - One-click service initialization
+3. **Data Quality Monitoring**: [`docs/clickhouse_table_verification.md`](docs/clickhouse_table_verification.md) - Comprehensive data validation
+4. **Pipeline Testing**: [`scripts/test_spark_clickhouse_bridge.py`](scripts/test_spark_clickhouse_bridge.py) - End-to-end pipeline validation
+5. **Configuration Management**: [`config/settings.py`](config/settings.py) - Centralized configuration
+
+## Quick Start Commands
+
+### Initial Setup
+```bash
+# Start all services
+docker-compose up -d
+
+# Initialize infrastructure and data
+./scripts/bootstrap.sh
+```
+
+### Data Generation
+```bash
+# Generate sample dimension data
+docker exec data-generator python scripts/create_sample_data.py
+
+# Start real-time data generation
+docker exec data-generator python scripts/data_generator.py --duration 60 --rate 10
+```
+
+### Spark Job Submission
+```bash
+# Submit unified streaming bridge (recommended)
+docker exec spark-master ./submit_jobs.sh unified
+
+# Submit individual jobs
+docker exec spark-master ./submit_jobs.sh sales
+docker exec spark-master ./submit_jobs.sh inventory
+docker exec spark-master ./submit_jobs.sh ml
+
+# Check job status
+docker exec spark-master ./submit_jobs.sh status
+```
+
+### Data Verification
+```bash
+# Check ClickHouse tables
+python scripts/check_clickhouse_tables.py
+
+# Run comprehensive pipeline test
+python scripts/test_spark_clickhouse_bridge.py
+
+# Manual ClickHouse queries
+docker exec clickhouse clickhouse-client --password clickhouse --database retail
+```
+
+### Monitoring
+```bash
+# Check service logs
+docker-compose logs -f kafka
+docker-compose logs -f spark-master
+docker-compose logs -f data-generator
+
+# Access web interfaces
+# Kafka UI: http://localhost:8080
+# Spark UI: http://localhost:8082
+# Airflow: http://localhost:8081
+# MinIO: http://localhost:9001
+```
 
 ## Conclusion
 
@@ -340,10 +459,16 @@ This project provides a comprehensive foundation for understanding and implement
 The modular architecture allows for easy extension and customization, making it suitable for both learning and real-world implementation. The use of open-source technologies ensures accessibility and community support.
 
 ### Key Success Factors
-1. **Well-defined Architecture**: Clear separation of concerns
-2. **Scalable Design**: Ability to handle increasing data volumes
-3. **Comprehensive Monitoring**: End-to-end visibility
-4. **Academic Relevance**: Coverage of key big data concepts
-5. **Practical Implementation**: Real-world use case with business value
+1. **Well-defined Architecture**: Clear separation of concerns with unified streaming bridge
+2. **Scalable Design**: Ability to handle increasing data volumes with distributed processing
+3. **Comprehensive Monitoring**: End-to-end visibility with automated testing and validation
+4. **Academic Relevance**: Coverage of key big data concepts including streaming, ML, and analytics
+5. **Practical Implementation**: Real-world use case with business value and production-ready components
+
+### Recent Enhancements
+- **Unified Streaming Bridge**: Multi-topic processing with ClickHouse integration
+- **Automated Bootstrap**: One-click service initialization and data generation
+- **Comprehensive Testing**: End-to-end pipeline validation and data quality checks
+- **Enhanced Documentation**: Updated guides and verification procedures
 
 This project serves as both an educational resource and a starting point for production implementations in retail analytics and inventory management.

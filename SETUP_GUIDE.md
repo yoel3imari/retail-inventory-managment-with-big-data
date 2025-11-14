@@ -60,13 +60,13 @@ cd /opt/spark/jobs
 
 ## Service URLs
 
-| Service | URL | Port | Description |
-|---------|-----|------|-------------|
-| Kafka UI | http://localhost:8080 | 8080 | Kafka management interface |
-| Airflow | http://localhost:8081 | 8081 | Workflow orchestration |
-| Spark Master | http://localhost:8082 | 8082 | Spark cluster management |
-| MinIO Console | http://localhost:9001 | 9001 | Object storage management |
-| ClickHouse | http://localhost:8123 | 8123 | Database HTTP interface |
+| Service | URL | Port | Credentials | Description |
+|---------|-----|------|-------------|-------------|
+| Kafka UI | http://localhost:8080 | 8080 | None | Kafka management interface |
+| Airflow | http://localhost:8081 | 8081 | airflow/airflow | Workflow orchestration |
+| Spark Master UI | http://localhost:8082 | 8082 | None | Spark cluster management |
+| MinIO Console | http://localhost:9001 | 9001 | minioadmin/minioadmin | Object storage management |
+| ClickHouse HTTP | http://localhost:8123 | 8123 | default/clickhouse | Database HTTP interface |
 
 ## Detailed Setup Instructions
 
@@ -136,13 +136,19 @@ docker exec -it kafka kafka-topics --list --bootstrap-server localhost:9092
 ```
 
 Expected topics:
-- `sales_events`
-- `inventory_events`
+- `retail-sales-transactions` - Sales events and transactions
+- `retail-inventory-updates` - Inventory level changes
+- `retail-restock-alerts` - Low stock and restock notifications
+- `retail-price-changes` - Pricing updates
+- `retail-customer-events` - Customer behavior events
 
 #### 3. Submit Spark Jobs
 ```bash
 # Access Spark master
 docker exec -it spark-master bash
+
+# Submit unified streaming bridge (recommended)
+./submit_jobs.sh unified
 
 # Submit individual jobs
 ./submit_jobs.sh sales
@@ -150,8 +156,11 @@ docker exec -it spark-master bash
 ./submit_jobs.sh ml
 ./submit_jobs.sh batch
 
-# Or submit all
+# Or submit all streaming jobs
 ./submit_jobs.sh all
+
+# Check job status
+./submit_jobs.sh status
 ```
 
 ### Airflow Setup
@@ -202,12 +211,17 @@ docker exec -it kafka kafka-console-consumer \
 
 #### 2. Check ClickHouse Data
 ```sql
--- Check recent sales
-SELECT count(*) FROM retail.raw_sales_events 
-WHERE timestamp >= now() - INTERVAL 1 HOUR;
+-- Check recent sales metrics
+SELECT count(*) FROM retail.spark_sales_metrics
+WHERE window_start >= now() - INTERVAL 1 HOUR;
 
--- Check real-time metrics
-SELECT * FROM retail.realtime_dashboard LIMIT 10;
+-- Check inventory metrics
+SELECT * FROM retail.spark_inventory_metrics
+WHERE stock_status != 'IN_STOCK' LIMIT 10;
+
+-- Check streaming alerts
+SELECT * FROM retail.streaming_alerts
+WHERE alert_timestamp >= now() - INTERVAL 1 HOUR LIMIT 10;
 ```
 
 #### 3. Check Spark Applications
@@ -263,10 +277,16 @@ docker-compose logs spark-worker
 docker-compose logs data-generator
 
 # Check Kafka topics
-docker exec -it kafka kafka-topics --list --bootstrap-server localhost:9092
+docker exec kafka kafka-topics --list --bootstrap-server localhost:9092
 
 # Manually trigger data generation
-docker exec -it data-generator python /app/scripts/data_generator.py
+docker exec data-generator python scripts/data_generator.py --duration 10 --rate 5
+
+# Run comprehensive pipeline test
+python scripts/test_spark_clickhouse_bridge.py
+
+# Check ClickHouse tables
+python scripts/check_clickhouse_tables.py
 ```
 
 ## Performance Tuning
@@ -368,6 +388,41 @@ tar -czf config-backup.tar.gz docker-compose.yml config/ scripts/
 - ClickHouse query logs
 - Spark application logs
 - Airflow task logs
+
+## Automated Testing and Verification
+
+### Pipeline Testing
+```bash
+# Run comprehensive end-to-end pipeline test
+python scripts/test_spark_clickhouse_bridge.py
+
+# Check ClickHouse table data and quality
+python scripts/check_clickhouse_tables.py
+
+# Test individual components
+docker exec data-generator python scripts/test_minio_integration.py
+```
+
+### Data Quality Monitoring
+- **Table Verification**: Automated checks for ClickHouse table data
+- **Pipeline Health**: End-to-end data flow validation
+- **Service Connectivity**: Continuous monitoring of all services
+- **Alert Verification**: Testing of real-time alert generation
+
+### Quick Verification Commands
+```bash
+# Check service health
+docker-compose ps
+
+# Verify Kafka topics
+docker exec kafka kafka-topics --list --bootstrap-server localhost:9092
+
+# Check ClickHouse connectivity
+curl -s http://localhost:8123/ping
+
+# View recent data in ClickHouse
+docker exec clickhouse clickhouse-client --password clickhouse --database retail --query "SELECT count(*) FROM spark_sales_metrics"
+```
 
 ## Next Steps
 
