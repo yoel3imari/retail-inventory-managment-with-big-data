@@ -76,7 +76,7 @@ check_spark_worker() {
 
 # Check if Kafka is ready
 check_kafka() {
-    nc -z kafka 9092
+    timeout 1 bash -c "cat < /dev/null > /dev/tcp/kafka/9092" 2>/dev/null
 }
 
 # Check if ClickHouse is ready

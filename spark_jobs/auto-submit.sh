@@ -25,7 +25,7 @@ wait_for_worker() {
 # Wait for Kafka to be ready
 wait_for_kafka() {
     echo "Waiting for Kafka to be ready..."
-    while ! timeout 1 bash -c "cat < /dev/null > /dev/tcp/kafka/9092" 2>/dev/null; do
+    while ! nc -z kafka 19092; do
         echo "⏳ Waiting for Kafka..."
         sleep 5
     done

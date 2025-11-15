@@ -36,7 +36,7 @@ class UnifiedStreamingBridge:
         
         # Kafka configuration
         self.kafka_config = {
-            "bootstrap.servers": "kafka:9092",
+            "bootstrap.servers": "kafka:19092",
             "group.id": f"unified-bridge-group-{self.job_id}"
         }
         
@@ -71,33 +71,36 @@ class UnifiedStreamingBridge:
             return False
     
     def define_sales_schema(self):
-        """Define schema for sales events"""
+        """Define schema for sales events - matches actual Kafka message structure"""
         return StructType([
-            StructField("sale_id", StringType(), True),
+            StructField("transaction_id", StringType(), True),
             StructField("store_id", StringType(), True),
             StructField("product_id", StringType(), True),
-            StructField("customer_id", StringType(), True),
             StructField("quantity", IntegerType(), True),
             StructField("unit_price", DoubleType(), True),
             StructField("total_amount", DoubleType(), True),
-            StructField("sale_timestamp", TimestampType(), True),
+            StructField("timestamp", StringType(), True),  # ISO format string from producers
+            StructField("customer_id", StringType(), True),
             StructField("payment_method", StringType(), True),
-            StructField("promotion_id", StringType(), True)
+            StructField("store_region", StringType(), True),
+            StructField("product_category", StringType(), True),
+            StructField("event_type", StringType(), True),
+            StructField("event_version", StringType(), True)
         ])
     
     def define_inventory_schema(self):
-        """Define schema for inventory events"""
+        """Define schema for inventory events - matches actual Kafka message structure"""
         return StructType([
             StructField("inventory_id", StringType(), True),
             StructField("store_id", StringType(), True),
             StructField("product_id", StringType(), True),
-            StructField("current_stock", IntegerType(), True),
-            StructField("minimum_stock", IntegerType(), True),
-            StructField("maximum_stock", IntegerType(), True),
-            StructField("reorder_point", IntegerType(), True),
-            StructField("last_restock_date", TimestampType(), True),
-            StructField("next_restock_date", TimestampType(), True),
-            StructField("update_timestamp", TimestampType(), True)
+            StructField("quantity_change", IntegerType(), True),
+            StructField("new_quantity", IntegerType(), True),
+            StructField("previous_quantity", IntegerType(), True),
+            StructField("reason", StringType(), True),
+            StructField("timestamp", StringType(), True),  # ISO format string from producers
+            StructField("event_type", StringType(), True),
+            StructField("event_version", StringType(), True)
         ])
     
     def read_from_kafka(self):
@@ -106,7 +109,7 @@ class UnifiedStreamingBridge:
             df = self.spark \
                 .readStream \
                 .format("kafka") \
-                .option("kafka.bootstrap.servers", "kafka:9092") \
+                .option("kafka.bootstrap.servers", "kafka:19092") \
                 .option("subscribe", ",".join(self.topics)) \
                 .option("startingOffsets", "latest") \
                 .option("failOnDataLoss", "false") \
@@ -121,48 +124,87 @@ class UnifiedStreamingBridge:
     
     def parse_unified_data(self, kafka_df: DataFrame) -> DataFrame:
         """Parse JSON data from Kafka and apply appropriate schemas"""
-        # Parse sales events separately
-        sales_df = kafka_df \
-            .filter(col("topic") == "retail-sales-transactions") \
-            .select(
-                col("topic"),
-                col("key").cast("string"),
-                col("value").cast("string"),
-                col("timestamp")
-            ) \
-            .withColumn("parsed_data", from_json(col("value"), self.define_sales_schema())) \
-            .filter(col("parsed_data").isNotNull())
-        
-        # Parse inventory events separately
-        inventory_df = kafka_df \
-            .filter(col("topic") == "retail-inventory-updates") \
-            .select(
-                col("topic"),
-                col("key").cast("string"),
-                col("value").cast("string"),
-                col("timestamp")
-            ) \
-            .withColumn("parsed_data", from_json(col("value"), self.define_inventory_schema())) \
-            .filter(col("parsed_data").isNotNull())
-        
-        # Return both dataframes separately - we'll process them individually
-        return sales_df, inventory_df
+        try:
+            # Parse sales events separately
+            sales_df = kafka_df \
+                .filter(col("topic") == "retail-sales-transactions") \
+                .select(
+                    col("topic"),
+                    col("key").cast("string"),
+                    col("value").cast("string"),
+                    col("timestamp")
+                ) \
+                .withColumn("parsed_data", from_json(col("value"), self.define_sales_schema())) \
+                .withColumn("parse_success", col("parsed_data").isNotNull()) \
+                .withColumn("parse_error",
+                           when(col("parsed_data").isNull(), "Failed to parse sales JSON").otherwise(""))
+            
+            # Log parsing failures for sales
+            sales_failures = sales_df.filter(col("parse_success") == False)
+            if sales_failures.count() > 0:
+                logger.warning(f"Failed to parse {sales_failures.count()} sales events")
+                # Log first few failures for debugging
+                sales_failures.select("value", "parse_error").limit(5).show(truncate=False)
+            
+            sales_df = sales_df.filter(col("parse_success") == True).drop("parse_success", "parse_error")
+            
+            # Parse inventory events separately
+            inventory_df = kafka_df \
+                .filter(col("topic") == "retail-inventory-updates") \
+                .select(
+                    col("topic"),
+                    col("key").cast("string"),
+                    col("value").cast("string"),
+                    col("timestamp")
+                ) \
+                .withColumn("parsed_data", from_json(col("value"), self.define_inventory_schema())) \
+                .withColumn("parse_success", col("parsed_data").isNotNull()) \
+                .withColumn("parse_error",
+                           when(col("parsed_data").isNull(), "Failed to parse inventory JSON").otherwise(""))
+            
+            # Log parsing failures for inventory
+            inventory_failures = inventory_df.filter(col("parse_success") == False)
+            if inventory_failures.count() > 0:
+                logger.warning(f"Failed to parse {inventory_failures.count()} inventory events")
+                # Log first few failures for debugging
+                inventory_failures.select("value", "parse_error").limit(5).show(truncate=False)
+            
+            inventory_df = inventory_df.filter(col("parse_success") == True).drop("parse_success", "parse_error")
+            
+            logger.info(f"Successfully parsed {sales_df.count()} sales events and {inventory_df.count()} inventory events")
+            
+            # Return both dataframes separately - we'll process them individually
+            return sales_df, inventory_df
+            
+        except Exception as e:
+            logger.error(f"Error parsing unified data: {e}")
+            # Return empty dataframes to avoid breaking the pipeline
+            empty_schema = StructType([StructField("topic", StringType(), True)])
+            empty_sales_df = self.spark.createDataFrame([], empty_schema)
+            empty_inventory_df = self.spark.createDataFrame([], empty_schema)
+            return empty_sales_df, empty_inventory_df
     
     def process_sales_stream(self, sales_df: DataFrame) -> tuple:
         """Process sales data stream"""
-        # Extract sales data
+        # Extract sales data and convert timestamp
         sales_data = sales_df \
             .select(
-                col("parsed_data.sale_id"),
-                col("parsed_data.store_id"),
-                col("parsed_data.product_id"),
-                col("parsed_data.customer_id"),
-                col("parsed_data.quantity"),
-                col("parsed_data.unit_price"),
-                col("parsed_data.total_amount"),
-                col("parsed_data.sale_timestamp"),
-                col("parsed_data.payment_method"),
+                col("parsed_data.*"),
                 col("timestamp").alias("kafka_timestamp")
+            ) \
+            .select(
+                col("transaction_id").alias("sale_id"),
+                col("store_id"),
+                col("product_id"),
+                col("customer_id"),
+                col("quantity"),
+                col("unit_price"),
+                col("total_amount"),
+                to_timestamp(col("timestamp")).alias("sale_timestamp"),  # Convert ISO string to timestamp
+                col("payment_method"),
+                col("store_region"),
+                col("product_category"),
+                col("kafka_timestamp")
             )
         
         # Calculate real-time metrics
@@ -193,18 +235,22 @@ class UnifiedStreamingBridge:
     
     def process_inventory_stream(self, inventory_df: DataFrame) -> tuple:
         """Process inventory data stream"""
-        # Extract inventory data
+        # Extract inventory data and convert timestamp
         inventory_data = inventory_df \
             .select(
-                col("parsed_data.inventory_id"),
-                col("parsed_data.store_id"),
-                col("parsed_data.product_id"),
-                col("parsed_data.current_stock"),
-                col("parsed_data.minimum_stock"),
-                col("parsed_data.maximum_stock"),
-                col("parsed_data.reorder_point"),
-                col("parsed_data.update_timestamp"),
+                col("parsed_data.*"),
                 col("timestamp").alias("kafka_timestamp")
+            ) \
+            .select(
+                col("inventory_id"),
+                col("store_id"),
+                col("product_id"),
+                col("quantity_change"),
+                col("new_quantity").alias("current_stock"),
+                col("previous_quantity"),
+                col("reason"),
+                to_timestamp(col("timestamp")).alias("update_timestamp"),  # Convert ISO string to timestamp
+                col("kafka_timestamp")
             )
         
         # Calculate inventory metrics
@@ -217,29 +263,25 @@ class UnifiedStreamingBridge:
             ) \
             .agg(
                 last("current_stock").alias("latest_stock"),
-                last("minimum_stock").alias("min_stock"),
-                last("maximum_stock").alias("max_stock"),
-                last("reorder_point").alias("reorder_level"),
+                sum("quantity_change").alias("total_quantity_change"),
                 count("inventory_id").alias("update_count"),
                 min("current_stock").alias("min_observed_stock"),
                 max("current_stock").alias("max_observed_stock")
             ) \
             .withColumn("window_start", col("window.start")) \
             .withColumn("window_end", col("window.end")) \
-            .withColumn("stock_status", 
+            .withColumn("stock_status",
                        when(col("latest_stock") <= 0, "OUT_OF_STOCK")
-                       .when(col("latest_stock") <= col("reorder_level"), "LOW_STOCK")
+                       .when(col("latest_stock") <= 10, "LOW_STOCK")  # Fixed threshold for low stock
                        .otherwise("IN_STOCK")) \
-            .withColumn("stock_percentage", 
-                       (col("latest_stock") / col("max_stock")) * 100) \
             .drop("window")
         
         # Simple inventory alerts for streaming (avoid window functions)
         inventory_alerts = inventory_data \
             .withColumn("alert_type",
                        when(col("current_stock") <= 0, "CRITICAL_OUT_OF_STOCK")
-                       .when(col("current_stock") <= col("reorder_point"), "LOW_STOCK_ALERT")
-                       .when(col("current_stock") > col("maximum_stock"), "OVERSTOCKED")
+                       .when(col("current_stock") <= 10, "LOW_STOCK_ALERT")  # Fixed threshold
+                       .when(col("current_stock") > 200, "OVERSTOCKED")  # Fixed threshold
                        .otherwise("NORMAL")) \
             .withColumn("alert_severity",
                        when(col("alert_type") == "CRITICAL_OUT_OF_STOCK", "CRITICAL")
@@ -280,17 +322,21 @@ class UnifiedStreamingBridge:
     def write_raw_events_to_clickhouse(self, df: DataFrame, batch_id: int):
         """Write raw events to ClickHouse for auditing"""
         if self.clickhouse_writer:
-            raw_events_df = df.select(
-                when(col("topic") == "retail-sales-transactions", col("sale_id"))
-                 .when(col("topic") == "retail-inventory-updates", col("inventory_id"))
-                 .alias("event_id"),
-                col("topic"),
-                when(col("topic") == "retail-sales-transactions", "SALES")
-                 .when(col("topic") == "retail-inventory-updates", "INVENTORY")
-                 .alias("event_type"),
-                when(col("topic") == "retail-sales-transactions", col("sale_timestamp"))
-                 .when(col("topic") == "retail-inventory-updates", col("update_timestamp"))
-                 .alias("event_timestamp"),
+            # Create separate raw events for sales and inventory
+            sales_raw = df.filter(col("customer_id").isNotNull()).select(
+                col("sale_id").alias("event_id"),
+                lit("SALES").alias("event_type"),
+                col("sale_timestamp").alias("event_timestamp"),
+                col("kafka_timestamp"),
+                col("store_id"),
+                col("product_id"),
+                to_json(struct("*")).alias("payload")
+            )
+            
+            inventory_raw = df.filter(col("customer_id").isNull()).select(
+                col("sale_id").alias("event_id"),  # This was mapped from inventory_id
+                lit("INVENTORY").alias("event_type"),
+                col("sale_timestamp").alias("event_timestamp"),  # This was mapped from update_timestamp
                 col("kafka_timestamp"),
                 col("store_id"),
                 col("product_id"),
@@ -298,9 +344,6 @@ class UnifiedStreamingBridge:
             )
             
             # Write each event type separately
-            sales_raw = raw_events_df.filter(col("event_type") == "SALES")
-            inventory_raw = raw_events_df.filter(col("event_type") == "INVENTORY")
-            
             if sales_raw.count() > 0:
                 self.clickhouse_writer.write_raw_events(sales_raw, "SALES", batch_id)
             if inventory_raw.count() > 0:

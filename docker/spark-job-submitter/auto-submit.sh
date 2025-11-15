@@ -25,7 +25,7 @@ wait_for_worker() {
 # Wait for Kafka to be ready
 wait_for_kafka() {
     echo "Waiting for Kafka to be ready..."
-    while ! nc -z kafka 9092; do
+    while ! timeout 1 bash -c "cat < /dev/null > /dev/tcp/kafka/9092" 2>/dev/null; do
         echo "⏳ Waiting for Kafka..."
         sleep 5
     done
@@ -46,6 +46,10 @@ wait_for_clickhouse() {
 submit_unified_bridge() {
     echo "📤 Submitting Unified Streaming Bridge job..."
     
+    # Set Ivy cache to writable location
+    export IVY_CACHE_DIR="/tmp/.ivy2"
+    mkdir -p $IVY_CACHE_DIR/cache
+    
     /opt/spark/bin/spark-submit \
         --master spark://spark-master:7077 \
         --deploy-mode client \
@@ -54,11 +58,12 @@ submit_unified_bridge() {
         --conf "spark.sql.adaptive.enabled=true" \
         --conf "spark.sql.adaptive.coalescePartitions.enabled=true" \
         --conf "spark.streaming.backpressure.enabled=true" \
-        --conf "spark.streaming.kafka.maxRatePerPartition=75" \
-        --conf "spark.driver.memory=2g" \
-        --conf "spark.executor.memory=2g" \
-        --conf "spark.driver.cores=2" \
-        --conf "spark.executor.cores=2" \
+        --conf "spark.streaming.kafka.maxRatePerPartition=50" \
+        --conf "spark.driver.memory=512m" \
+        --conf "spark.executor.memory=512m" \
+        --conf "spark.driver.cores=1" \
+        --conf "spark.executor.cores=1" \
+        --conf "spark.jars.ivy=/tmp/.ivy2" \
         /opt/spark/jobs/unified_streaming_bridge.py &
     
     echo "✅ Unified Streaming Bridge job submitted!"

@@ -176,9 +176,9 @@ services:
     command: >
       bash -c "
         /opt/spark/sbin/start-master.sh &&
-        sleep 10 &&
+        sleep 30 &&
         /opt/spark/jobs/auto-submit.sh &
-        tail -f /opt/spark/logs/spark--org.apache.spark.deploy.master.Master-1-*.out
+        tail -f /dev/null
       "
     ports:
       - "7077:7077"      # Spark master port
@@ -205,7 +205,7 @@ services:
     command: >
       bash -c "
         /opt/spark/sbin/start-worker.sh spark://spark-master:7077 &&
-        tail -f /opt/spark/logs/spark--org.apache.spark.deploy.worker.Worker-1-*.out
+        tail -f /dev/null
       "
     environment:
       SPARK_WORKER_MEMORY: 1G
