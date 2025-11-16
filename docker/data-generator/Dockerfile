@@ -1,5 +1,5 @@
 # Use a base image for Python and slim footprint
-FROM python:3.9-slim
+FROM python:3.12-slim
 
 # Install uv
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
@@ -10,10 +10,10 @@ WORKDIR /app
 ENV PYTHONPATH=/app
 
 # First copy only project metadata (for better Docker caching)
-COPY requirements.txt ./
+COPY requirements.txt pyproject.toml uv.lock* README.md ./
 
-# Install dependencies using uv (no cache, frozen lockfile)
-RUN uv pip install --system -r requirements.txt
+# Install dependencies using uv (frozen lockfile)
+RUN uv sync --frozen --no-editable
 
 # Now copy the rest of the app
 COPY . .
